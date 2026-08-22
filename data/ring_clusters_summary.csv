@@ -1,0 +1,10 @@
+cluster_id,cluster_type,n_accounts,n_devices,n_transactions,device_concentration,timing_sync_score,median_amount,decline_rate,n_distinct_days,ring_risk_score
+270,card_testing_burst,35,3,109,11.67,1.0,27.81,0.963,1,0.867
+462,card_testing_burst,34,4,111,8.5,1.0,24.59,0.955,1,0.867
+471,card_testing_burst,36,2,118,18.0,1.0,22.12,0.915,1,0.867
+453,coordinated_ring,7,1,7,7.0,0.137,418.96,0.0,2,0.533
+400,coordinated_ring,13,4,29,3.25,0.014,418.45,0.0,3,0.444
+414,coordinated_ring,7,2,8,3.5,0.046,764.42,0.0,2,0.353
+452,coordinated_ring,4,1,5,4.0,0.029,405.68,0.0,2,0.347
+451,coordinated_ring,4,1,4,4.0,0.0,573.05,0.0,2,0.338
+415,coordinated_ring,4,2,5,2.0,0.278,909.25,0.0,2,0.334
