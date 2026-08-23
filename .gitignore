@@ -18,3 +18,7 @@ dist/
 # Editors
 .vscode/
 .idea/
+
+# frontend build output (already in Node section above, being explicit)
+frontend/node_modules/
+frontend/dist/

@@ -98,3 +98,40 @@ sentinel/
 - Sep 3: adversarial testing (prompt injection, malformed payloads, concurrent load)
 - Sep 4: README/architecture polish, write-up from FAILURES.md
 - Sep 5: record demo video, submit
+
+## Running it locally
+
+**Backend** (from `backend/`):
+```bash
+pip install -r requirements.txt --break-system-packages
+python -m app.services.data_generator     # generates data/*.csv
+python -m app.services.features           # generates data/features.csv
+python -m app.services.ring_detection     # generates data/ring_clusters_summary.csv
+python -m app.services.ml_detection       # trains + saves models to app/core/trained_models/
+uvicorn app.api.main:app --reload --port 8000
+```
+Visit `http://localhost:8000/docs` for interactive API docs.
+
+To get real (not fallback) LLM reasoning, set your API key first:
+```bash
+export ANTHROPIC_API_KEY=sk-...   # macOS/Linux
+$env:ANTHROPIC_API_KEY="sk-..."   # Windows PowerShell
+```
+Without a key, the reasoning layer's fail-safe fallback kicks in correctly
+(routes to "review" instead of crashing or guessing) -- see FAILURES.md.
+
+**Frontend** (from `frontend/`, in a separate terminal):
+```bash
+npm install
+npm run dev
+```
+Visit `http://localhost:5173`. The dashboard polls the backend every 4
+seconds and lets you trigger live scenarios (normal transaction, account
+takeover, card-testing burst) via the control panel -- each one runs
+through the real pipeline and appears in the live decision chain.
+
+**Known low-priority item:** `npm audit` flags a moderate-severity advisory
+in Vite's bundled esbuild (dev server only, not the production build --
+allows cross-origin requests to the local dev server). Fixing it requires
+a breaking upgrade to Vite 8 that hasn't been tested against this project.
+Not a concern for local development/demo use.
