@@ -151,3 +151,30 @@ production system would need re-benchmarking on live transaction data,
 since real attackers adapt against whatever the detector currently checks
 for -- a point the 2026 fraud research (deepfake/synthetic-identity growth,
 AI-orchestrated attack tooling) makes directly.
+
+---
+
+## [Aug 22] LLM reasoning layer, triage gate, audit ledger — integrated clean
+
+Built the Pydantic-bounded reasoning agent, the triage gate (auto-allow /
+LLM-reasoned / auto-flag-obvious), and the hash-chained audit ledger, then
+ran all three together against 322 real scored transactions in one pass.
+
+Worth stating plainly rather than skipping: this phase didn't surface a bug
+the way the ring-detection and ML phases did. Checked instead of assumed:
+the actual routing counts (150 auto-allow / 97 LLM-band / 75 auto-flag),
+the final-status crosstab against true labels (0 fraud reached "allowed";
+all 9 false positives capped at "flagged for review," never auto-blocked),
+and deliberately ran the tamper-detection test on the ledger (edit an
+entry, confirm verify_chain() catches it) rather than assuming it worked.
+All checked out. Noted here for contrast with the entries above -- not
+every phase needs a manufactured struggle to be worth documenting honestly.
+
+**Real limitation, disclosed directly:** the "llm_reasoned" path in this
+run used a rule-based mock, not the real Anthropic API -- this build
+environment has no ANTHROPIC_API_KEY. The mock derives its answer from the
+same feature values a real prompt would contain, so it's an honest test of
+the pipeline's plumbing (routing, schema validation, logging), but it is
+NOT evidence of real LLM reasoning quality. That can only be measured
+against the live model, which needs a real API key -- next real step once
+one is available.
