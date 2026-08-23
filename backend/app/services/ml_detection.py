@@ -20,6 +20,9 @@ Run:
 
 import pandas as pd
 import numpy as np
+import joblib
+import json
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import IsolationForest, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
@@ -27,6 +30,8 @@ from sklearn.metrics import (
     precision_score, recall_score, f1_score, confusion_matrix,
     roc_auc_score, precision_recall_curve,
 )
+
+MODEL_DIR = "/home/claude/sentinel/backend/app/core/trained_models"
 
 FEATURE_COLS = [
     "velocity_1h", "velocity_24h", "device_velocity_1h", "ip_velocity_1h",
@@ -56,7 +61,7 @@ def load_and_split(test_size=0.3, random_state=42):
     return X_train, X_test, y_train, y_test, df_train, df_test
 
 
-def train_ensemble(X_train, y_train):
+def train_ensemble(X_train, y_train, sample_weight=None):
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
@@ -68,21 +73,61 @@ def train_ensemble(X_train, y_train):
     gbt = GradientBoostingClassifier(
         n_estimators=150, max_depth=3, learning_rate=0.1, random_state=42
     )
-    gbt.fit(X_train, y_train)
+    gbt.fit(X_train, y_train, sample_weight=sample_weight)
 
     return scaler, iso, gbt
 
 
-def ensemble_score(scaler, iso, gbt, X):
+def save_ensemble(scaler, iso, gbt, iso_calibration: dict, model_dir: str = MODEL_DIR):
+    """Persist trained models AND the iso calibration bounds so the API
+    server can load them at startup instead of retraining every time it
+    boots, and so single-transaction live scoring uses the same reference
+    bounds the offline benchmark was measured with."""
+    os.makedirs(model_dir, exist_ok=True)
+    joblib.dump(scaler, os.path.join(model_dir, "scaler.joblib"))
+    joblib.dump(iso, os.path.join(model_dir, "isolation_forest.joblib"))
+    joblib.dump(gbt, os.path.join(model_dir, "gradient_boosted_trees.joblib"))
+    with open(os.path.join(model_dir, "iso_calibration.json"), "w") as f:
+        json.dump(iso_calibration, f)
+
+
+def load_ensemble(model_dir: str = MODEL_DIR):
+    scaler = joblib.load(os.path.join(model_dir, "scaler.joblib"))
+    iso = joblib.load(os.path.join(model_dir, "isolation_forest.joblib"))
+    gbt = joblib.load(os.path.join(model_dir, "gradient_boosted_trees.joblib"))
+    with open(os.path.join(model_dir, "iso_calibration.json")) as f:
+        iso_calibration = json.load(f)
+    return scaler, iso, gbt, iso_calibration
+
+
+def fit_iso_calibration(scaler, iso, X_train) -> dict:
+    """Isolation Forest's raw scores are meaningful only relative to a
+    reference distribution. Rescaling min-max against whatever batch is
+    passed in works for offline evaluation (large batches) but silently
+    breaks for live single-transaction scoring: with one row, min == max,
+    so the rescaled score is always exactly 0.0 regardless of how anomalous
+    the transaction actually is -- caught this by testing exactly that case
+    before wiring up the live API. Fix: compute fixed calibration bounds
+    once, from the training set, and reuse them for every future scoring
+    call regardless of batch size."""
+    X_train_scaled = scaler.transform(X_train)
+    iso_raw = -iso.score_samples(X_train_scaled)
+    return {"iso_raw_min": float(iso_raw.min()), "iso_raw_max": float(iso_raw.max())}
+
+
+def ensemble_score(scaler, iso, gbt, X, iso_calibration: dict = None):
     X_scaled = scaler.transform(X)
-    # Isolation Forest: more negative = more anomalous. Rescale to 0-1.
     iso_raw = -iso.score_samples(X_scaled)
-    iso_score = (iso_raw - iso_raw.min()) / (iso_raw.max() - iso_raw.min() + 1e-9)
+
+    if iso_calibration is not None:
+        lo, hi = iso_calibration["iso_raw_min"], iso_calibration["iso_raw_max"]
+    else:
+        # fallback: batch-relative (only valid for large, representative
+        # batches -- NOT safe for single-row live scoring, see docstring above)
+        lo, hi = iso_raw.min(), iso_raw.max()
+    iso_score = np.clip((iso_raw - lo) / (hi - lo + 1e-9), 0, 1)
 
     gbt_score = gbt.predict_proba(X)[:, 1]
-
-    # simple average ensemble -- not tuned/weighted beyond this, kept
-    # interpretable rather than squeezing out a marginal AUC gain
     combined = 0.5 * iso_score + 0.5 * gbt_score
     return combined, iso_score, gbt_score
 
@@ -136,8 +181,22 @@ if __name__ == "__main__":
     print(f"Train: {len(X_train)}  Test (held out): {len(X_test)}")
     print(f"Fraud rate -- train: {y_train.mean():.2%}  test: {y_test.mean():.2%}")
 
-    scaler, iso, gbt = train_ensemble(X_train, y_train)
-    combined_score, iso_score, gbt_score = ensemble_score(scaler, iso, gbt, X_test)
+    # ATO has far fewer training examples (45) than card-testing (310) or
+    # normal (thousands) -- with a single binary fraud label, gradient
+    # boosting naturally optimizes for whichever sub-pattern is most
+    # populous and separable (ip_velocity, which fires for card-testing and
+    # rings), and under-serves rarer sub-types. Checked this directly: the
+    # exact ATO case that exposed the account_age leakage bug still scored
+    # low on the GBT component alone even after that fix. Upweighting rare
+    # fraud sub-types in training is the honest fix, not silently hoping
+    # the ensemble average covers for it.
+    RARE_FRAUD_LABELS = {"ato", "ato_stealthy"}
+    sample_weight = df_train["label"].apply(lambda l: 4.0 if l in RARE_FRAUD_LABELS else 1.0).values
+
+    scaler, iso, gbt = train_ensemble(X_train, y_train, sample_weight=sample_weight)
+    iso_calibration = fit_iso_calibration(scaler, iso, X_train)
+    print(f"Iso calibration bounds (from training set): {iso_calibration}")
+    combined_score, iso_score, gbt_score = ensemble_score(scaler, iso, gbt, X_test, iso_calibration)
 
     print("\n=== Ensemble (Isolation Forest + Gradient Boosted Trees) ===")
     evaluate(df_test, combined_score, threshold=0.5)
@@ -151,3 +210,6 @@ if __name__ == "__main__":
     df_test["gbt_score"] = gbt_score
     df_test.to_csv("/home/claude/sentinel/data/scored_test_set.csv", index=False)
     print("\nSaved scored test set to data/scored_test_set.csv")
+
+    save_ensemble(scaler, iso, gbt, iso_calibration)
+    print(f"Saved trained models + calibration to {MODEL_DIR}/ for the API server to load at startup")

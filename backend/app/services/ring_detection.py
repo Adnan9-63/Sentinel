@@ -162,43 +162,63 @@ def score_clusters(G: nx.Graph, txns_df: pd.DataFrame, min_cluster_size: int = 4
     return result
 
 
-def evaluate_against_ground_truth(clusters_df: pd.DataFrame, accounts_df: pd.DataFrame, threshold: float = 0.5):
-    """Evaluate ring detection and card-testing detection SEPARATELY against
-    their own ground truth, since they're different attack types that happen
-    to produce similar graph shapes."""
+def evaluate_against_ground_truth(clusters_df: pd.DataFrame, accounts_df: pd.DataFrame, txns_df: pd.DataFrame, threshold: float = 0.5):
+    """Evaluate at two levels, not one:
+
+    1. ANY-FRAUD recall/precision: does a flagged cluster contain real fraud
+       of ANY kind (ring OR card-testing), regardless of which sub-type label
+       it got assigned? This is the number that actually matters for the
+       system's core defensive action (flag for human review) -- getting the
+       cluster right but the sub-type label wrong still protects the
+       merchant.
+    2. Per-sub-type breakdown: how well does cluster_type actually
+       distinguish ring vs. card-testing? This is a secondary, best-effort
+       classification and is disclosed as such -- see FAILURES.md. The
+       stealthy card-testing variant, designed specifically to evade
+       card-testing heuristics (larger device/IP pool, higher amounts,
+       spread over hours), does exactly that: it evades the sub-type
+       classifier too, and gets labeled "coordinated_ring" instead. That's
+       an honest limitation of the secondary label, not a failure of the
+       primary flagging."""
     true_ring_accounts = set(accounts_df.loc[accounts_df["ring_id"].notna(), "account_id"])
+    true_cardtest_accounts = set(
+        txns_df.loc[txns_df["label"].isin(["card_testing", "card_testing_stealthy"]), "account_id"]
+    )
+    any_fraud_accounts = true_ring_accounts | true_cardtest_accounts
 
     flagged = clusters_df[clusters_df["ring_risk_score"] >= threshold]
     if flagged.empty:
         print(f"No clusters scored >= {threshold}. Lower the threshold or check cluster construction.")
         return
 
+    all_flagged_accounts = set()
+    for accs in flagged["account_ids"]:
+        all_flagged_accounts.update(accs)
+
+    tp = all_flagged_accounts & any_fraud_accounts
+    fp = all_flagged_accounts - any_fraud_accounts
+    recall = len(tp) / len(any_fraud_accounts)
+    precision = len(tp) / max(len(all_flagged_accounts), 1)
+    print(f"=== PRIMARY: any-fraud-type cluster flagging (threshold {threshold}) ===")
+    print(f"Precision: {precision:.1%}  Recall: {recall:.1%}  "
+          f"({len(tp)} caught / {len(any_fraud_accounts)} real, {len(fp)} false positives)")
+    if fp:
+        print(f"  False positive examples: {list(fp)[:5]}")
+
+    print(f"\n=== SECONDARY (best-effort): per-sub-type breakdown ===")
     for target_type, true_accounts, label in [
         ("coordinated_ring", true_ring_accounts, "Coordinated abuse rings"),
-        ("card_testing_burst", None, "Card-testing bursts"),
+        ("card_testing_burst", true_cardtest_accounts, "Card-testing bursts"),
     ]:
         subset = flagged[flagged["cluster_type"] == target_type]
         flagged_accounts = set()
         for accs in subset["account_ids"]:
             flagged_accounts.update(accs)
-
-        print(f"\n{label}: {len(subset)} clusters flagged, {len(flagged_accounts)} accounts swept in")
-
-        if true_accounts is not None:
-            tp = flagged_accounts & true_accounts
-            fp = flagged_accounts - true_accounts
-            missed = true_accounts - flagged_accounts
-            precision = len(tp) / max(len(flagged_accounts), 1)
-            recall = len(tp) / max(len(true_accounts), 1)
-            print(f"  True members correctly caught: {len(tp)} / {len(true_accounts)} planted (recall {recall:.1%})")
-            print(f"  Wrongly swept in (false positives): {len(fp)} (precision {precision:.1%})")
-            if missed:
-                print(f"  Missed entirely: {sorted(missed)[:5]}{'...' if len(missed) > 5 else ''}")
-        else:
-            n_synthetic = sum(1 for a in flagged_accounts if str(a).startswith("acc_synthetic"))
-            n_other = len(flagged_accounts) - n_synthetic
-            print(f"  Of these, {n_synthetic} are known card-testing target accounts, "
-                  f"{n_other} are other accounts swept in alongside them")
+        sub_tp = flagged_accounts & true_accounts
+        sub_recall = len(sub_tp) / max(len(true_accounts), 1)
+        sub_precision = len(sub_tp) / max(len(flagged_accounts), 1)
+        print(f"{label}: {len(subset)} clusters, {len(flagged_accounts)} accounts, "
+              f"precision {sub_precision:.1%}, recall {sub_recall:.1%} (vs. this sub-type's own ground truth)")
 
 
 if __name__ == "__main__":
@@ -219,7 +239,7 @@ if __name__ == "__main__":
     # graph fragments are always pure ring members, never mixed with real
     # accounts. Below 0.3 recall plateaus (69.6%), so there's no benefit to
     # going lower; above it, recall drops fast for zero precision gain.
-    evaluate_against_ground_truth(clusters_df, accounts, threshold=0.3)
+    evaluate_against_ground_truth(clusters_df, accounts, txns, threshold=0.3)
 
     clusters_df.drop(columns=["account_ids"]).to_csv(
         "/home/claude/sentinel/data/ring_clusters_summary.csv", index=False

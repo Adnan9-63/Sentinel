@@ -178,3 +178,106 @@ the pipeline's plumbing (routing, schema validation, logging), but it is
 NOT evidence of real LLM reasoning quality. That can only be measured
 against the live model, which needs a real API key -- next real step once
 one is available.
+
+---
+
+## [Aug 23] Isolation Forest silently dead for single-transaction scoring
+
+While preparing the live API (which scores one new transaction at a time,
+not a batch), tested `ensemble_score()` against a single row before wiring
+it up, instead of assuming the batch-tested function would just work.
+
+It didn't. `ensemble_score` rescaled the Isolation Forest's raw anomaly
+score using min-max normalization computed FROM THE BATCH PASSED IN. That's
+fine for offline evaluation (thousands of rows, a real min and max). For a
+single live transaction, min == max == the one value, so the rescaled score
+is `(x - x) / (x - x + 1e-9)` = exactly 0.0, always, regardless of how
+anomalous the transaction actually was. Confirmed directly: fed it a
+genuinely low-risk row and a genuinely high-risk row, both came back with
+iso_score = 0.0. Half the ensemble would have silently gone dead the moment
+this hit a live API, and every decision would have quietly relied on the
+GBT component alone -- with no error, no warning, nothing to notice.
+
+**Fix:** compute calibration bounds (min/max of the Isolation Forest's raw
+scores) ONCE, from the training set, save them alongside the trained models,
+and reuse those fixed bounds for every future scoring call regardless of
+batch size. Re-verified with the same two test rows -- iso_score now moves
+correctly (0.08 for the low-risk row, 0.98 for the high-risk one).
+
+Also refactored the causal feature-computation logic (features.py) into a
+shared FeatureState class so the live API and the offline benchmark use the
+literal same implementation, not two versions that could quietly drift
+apart. Verified the refactor changed nothing: reran the full feature
+pipeline before and after, diffed every numeric column -- max difference
+across all ~8,300 rows was 1.4e-14 (floating point noise, not a real
+change).
+
+---
+
+## [Aug 23] Live testing surfaced a real leakage bug the offline benchmark missed
+
+Built the FastAPI backend, started it for real, and hit it with actual HTTP
+requests rather than trusting the unit-level tests alone. Simulated a
+textbook account-takeover through `POST /api/simulate/ato`: an established
+161-day-old account, a purchase 15 standard deviations above its normal
+spend, a brand-new device, a city 1,285 km away. Expected: flagged.
+
+Got: risk_score 0.384, auto-allowed. A clean ATO signature slipped through
+the exact system built to catch it -- and this happened on the LIVE path,
+not in the offline benchmark, because the offline benchmark never
+constructs this specific combination in isolation the way a single live
+request does.
+
+**Root cause, found by checking feature importances instead of guessing:**
+`account_age_days` carried 85.5% of the GBT model's decision weight.
+Checked why: in the training data, `card_testing`/`card_testing_stealthy`
+accounts were ALWAYS exactly 0 days old (they're synthetic target accounts
+that never got a real signup record), and `ring` accounts averaged 10 days.
+Every legitimate account was 150-240 days old. The model had learned "brand
+new account = fraud" as a clean shortcut -- true by construction in this
+dataset, not a real fraud behavior, and it starved genuinely meaningful
+signals (amount anomaly, new device, geo jump) of influence because the age
+shortcut already explained most of the training loss.
+
+**Fix, at the data level, not by hiding the symptom:** added a cohort of
+genuinely new, legitimate signup accounts (`gen_new_signup_accounts` /
+`gen_new_legitimate_account_transactions`) -- real first-time users making
+their first few ordinary purchases, with account age in the same 0-25 day
+range as the fraud accounts. This forces the model to stop using age as a
+clean tell. Retrained: `account_age_days` importance dropped to 4.4%.
+
+**That fix had a side effect, chased down rather than left unexplained:**
+ring-detection precision on its own strict metric dropped from 100% to
+66%. Diagnosed: unrelated to the new signup cohort -- the stealthy
+card-testing variant (deliberately built to evade card-testing heuristics)
+was evading the ring/card-testing sub-type CLASSIFIER too, and getting
+labeled "coordinated_ring" instead of "card_testing_burst." Checked
+whether the actual defensive action (flag the cluster) still held up
+despite the wrong sub-label: yes -- any-fraud-type precision stayed at
+100%, recall 79.9%. Fixed the evaluation to report both the honest primary
+number (is this cluster fraud at all) and the secondary, disclosed-as-
+best-effort sub-type breakdown, instead of one misleading strict number.
+
+**One more real gap, found by re-testing the same ATO case after the data
+fix:** score moved from 0.384 to 0.437 (into the "escalate to LLM
+reasoning" band -- a real improvement) but the GBT component alone was
+still muted (0.234) for a textbook takeover. Checked feature importances
+again: `ip_velocity_1h` now dominated at 86.4%, and ATO has only 45
+training examples (isolated single events) against 310 for card-testing
+(bursts). Gradient boosting was optimizing for whichever fraud sub-type
+was most populous and separable, under-serving the rarer one. Fixed with
+sample-weighting (4x) on ato/ato_stealthy rows during training -- not a
+full re-architecture, a targeted correction for a specific, diagnosed
+imbalance. Result: same ATO case now scores 0.457, feature importance
+spread from one dominant signal to a genuine mix (ip_velocity 64%, amount
+z-score 12%, new-device 8%, new-geo 5%), and false negatives on real ATO
+dropped from 4 to 1 out of 45 total ATO examples in the test set.
+
+**Where this honestly leaves things:** the live-caught bug is meaningfully
+better, not perfectly solved -- 0.457 sits in the "ambiguous, escalate to
+LLM reasoning" band rather than the "obviously flag" band, which is a
+defensible outcome for a single ambiguous signal in isolation (a real
+high-spending traveler could look similar), not a confident catch. A
+production system would want more ATO training examples and probably a
+lower auto-allow threshold specifically for high-amount-anomaly cases.
+Documented here rather than tuned further to hit a rounder number.

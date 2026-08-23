@@ -107,6 +107,31 @@ def gen_normal_accounts(n_accounts):
     return accounts
 
 
+def gen_new_signup_accounts(n_accounts):
+    """Accounts created WITHIN the observation window, close to when their
+    transactions happen -- i.e. account_age_days will genuinely be small,
+    the same as fraud accounts, but the behavior is normal. This is what
+    prevents account age from being a clean fraud shortcut."""
+    accounts = []
+    for _ in range(n_accounts):
+        city = rng.choice(CITY_NAMES)
+        lat, lon = CITIES[city]
+        lat, lon = jitter_geo(lat, lon, km_std=5)
+        created = rand_timestamp(SIM_START, SIM_END - timedelta(days=2))
+        accounts.append({
+            "account_id": f"acc_new_{uuid.uuid4().hex[:10]}",
+            "created_at": created,
+            "home_city": city,
+            "home_lat": lat,
+            "home_lon": lon,
+            "kyc_status": "verified",
+            "account_type": "individual",
+            "ring_id": None,
+            "label_class": "new_signup",
+        })
+    return accounts
+
+
 def gen_normal_transactions(account, n_txn_range=(5, 30)):
     """A normal account: mostly same 1-2 devices, mostly home geo, log-normal amounts."""
     txns = []
@@ -253,6 +278,34 @@ def gen_stealthy_card_testing_attack(attack_id):
     return txns
 
 
+def gen_new_legitimate_account_transactions(account):
+    """A genuinely new, legitimate account: someone who just signed up and
+    is making their first few purchases. Exists specifically so the model
+    can't use 'brand new account' as a clean proxy for fraud -- without
+    this, card-testing and ring accounts (which ARE always brand new by
+    construction) are trivially separable by account age alone, and a
+    model trained on that shortcut ends up barely using genuine behavioral
+    signals for anything else. See FAILURES.md."""
+    txns = []
+    device = new_device_id()
+    signup_time = account["created_at"]
+    n_txn = int(rng.integers(1, 6))
+    for i in range(n_txn):
+        ts = signup_time + timedelta(hours=float(rng.uniform(0, 48 * (i + 1))))
+        if ts > SIM_END:
+            break
+        lat, lon = jitter_geo(account["home_lat"], account["home_lon"], km_std=6)
+        amount = float(np.round(rng.lognormal(mean=6.3, sigma=0.8), 2))
+        amount = min(amount, 20000)
+        txns.append(_txn_row(
+            account["account_id"], ts, device, new_ip(), lat, lon, amount,
+            is_new_device=(i == 0), is_new_geo=False,
+            status="success" if rng.random() > 0.03 else "failed",
+            label="normal_new_account",
+        ))
+    return txns
+
+
 def gen_ato_event(account):
     """Take an existing normal account and inject a takeover: new device, new
     (often distant/implausible) geo, followed quickly by a high-value txn that
@@ -369,6 +422,7 @@ def _txn_row(account_id, ts, device_id, ip, lat, lon, amount, is_new_device, is_
 
 def build_dataset(
     n_normal_accounts=450,
+    n_new_signup_accounts=80,
     n_ato_events=15,
     n_stealthy_ato_events=15,
     n_card_testing_attacks=3,
@@ -381,6 +435,14 @@ def build_dataset(
 
     for acc in accounts:
         all_txns.extend(gen_normal_transactions(acc))
+
+    # Genuinely new, legitimate accounts -- see gen_new_signup_accounts'
+    # docstring. These exist specifically so account age isn't a clean
+    # fraud shortcut for the model to latch onto.
+    new_signup_accounts = gen_new_signup_accounts(n_new_signup_accounts)
+    for acc in new_signup_accounts:
+        all_txns.extend(gen_new_legitimate_account_transactions(acc))
+    accounts.extend(new_signup_accounts)
 
     # ATO: pick real accounts from the normal pool and inject a takeover.
     # Half loud (obvious), half stealthy (deliberately hard) -- drawn from
