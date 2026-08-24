@@ -19,10 +19,23 @@ score, which path the decision took, and is independently verifiable.
 import json
 import hashlib
 import os
+import threading
 from datetime import datetime, timezone
 
 LEDGER_PATH = "/home/claude/sentinel/data/audit_ledger.jsonl"
 GENESIS_HASH = "0" * 64
+
+# The chain is only valid if entries are appended strictly one at a time --
+# each entry's prev_hash must be the actual previous entry's hash, not a
+# hash that TWO entries both read before either finished writing. Found
+# this the hard way: 60 concurrent requests all succeeded individually (200
+# OK, unique transaction IDs), but the chain came out broken -- several
+# hash slots were claimed by 2-3 entries at once, because the read-last-hash
+# and append-new-entry steps weren't atomic together. A single process-wide
+# lock around that critical section is the correct fix here: FastAPI runs
+# sync `def` endpoints in a thread pool within one process (not multiple
+# processes), so a threading.Lock genuinely serializes every writer.
+_ledger_lock = threading.Lock()
 
 
 def _hash_entry(prev_hash: str, entry: dict) -> str:
@@ -52,15 +65,16 @@ def _get_last_hash(path: str = LEDGER_PATH) -> str:
 
 def log_decision(entry: dict, path: str = LEDGER_PATH) -> dict:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    prev_hash = _get_last_hash(path)
-    record = {
-        **entry,
-        "logged_at": datetime.now(timezone.utc).isoformat(),
-        "prev_hash": prev_hash,
-    }
-    record["entry_hash"] = _hash_entry(prev_hash, record)
-    with open(path, "a") as f:
-        f.write(json.dumps(record, default=str) + "\n")
+    with _ledger_lock:
+        prev_hash = _get_last_hash(path)
+        record = {
+            **entry,
+            "logged_at": datetime.now(timezone.utc).isoformat(),
+            "prev_hash": prev_hash,
+        }
+        record["entry_hash"] = _hash_entry(prev_hash, record)
+        with open(path, "a") as f:
+            f.write(json.dumps(record, default=str) + "\n")
     return record
 
 

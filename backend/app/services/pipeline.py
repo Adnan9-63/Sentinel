@@ -20,6 +20,7 @@ Run:
 
 import os
 import json
+import re
 import pandas as pd
 
 from app.core.triage_gate import triage, LOW_THRESHOLD, HIGH_THRESHOLD
@@ -38,7 +39,12 @@ def mock_reasonable_llm(system_prompt: str, user_prompt: str) -> str:
     environment has no API key. Derives its answer from the feature values
     in the prompt itself (not from any ground-truth label), so it's an
     honest test of the pipeline plumbing even though it's not a real LLM."""
-    data = json.loads(user_prompt.split("<untrusted_data>\n", 1)[1].split("\n</untrusted_data>")[0])
+    # Tag name is random per-request now (see reasoning_agent._new_boundary_tag),
+    # so parse it out rather than assuming a fixed name.
+    tag_match = re.search(r"<(data_[0-9a-f]+)>\n(.*)\n</\1>", user_prompt, re.DOTALL)
+    if not tag_match:
+        raise ValueError("mock could not find the data boundary tag in the prompt")
+    data = json.loads(tag_match.group(2))
     f = data.get("transaction_features", {})
 
     signals = []

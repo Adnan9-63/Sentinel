@@ -281,3 +281,94 @@ high-spending traveler could look similar), not a confident catch. A
 production system would want more ATO training examples and probably a
 lower auto-allow threshold specifically for high-amount-anomaly cases.
 Documented here rather than tuned further to hit a rounder number.
+
+---
+
+## [Aug 24] Adversarial testing day, part 1: concurrent load broke the audit chain
+
+Fired 60 concurrent requests at the live `/api/simulate/normal` endpoint --
+the kind of load a real demo, a burst of real traffic, or just two people
+clicking buttons at the same time could generate.
+
+Every individual request succeeded: 60/60 returned 200 OK with unique
+transaction IDs. Looked fine at a glance. Checked the audit chain
+afterward anyway instead of assuming "all 200s" meant "all correct" --
+`verify_chain()` came back broken at entry #2.
+
+**Root cause:** `log_decision()` read the last entry's hash, then appended
+a new entry computed from that hash, as two separate, unprotected steps.
+Under concurrent load, multiple requests read the SAME "last hash" before
+any of them finished writing -- confirmed directly by checking the ledger
+file: several hash values were each claimed as the "previous entry" by 2-3
+different entries at once (one three-way collision). The chain didn't
+error out or crash; it just quietly forked, which is arguably worse for a
+feature whose entire job is proving nothing was tampered with -- a forked
+chain looks identical to a tampered one to anyone inspecting it later.
+
+**Fix:** wrapped the read-then-write critical section in a
+`threading.Lock()`. This is the correct fix specifically because FastAPI
+runs synchronous `def` endpoints across a thread pool within a single
+process (not multiple separate processes), so a process-wide lock
+genuinely serializes every writer. Re-ran the identical 60-request test
+after the fix: still 60/60 succeeded, and `verify_chain()` came back
+intact with all 60 entries correctly linked.
+
+**Also fixed proactively, not just reactively:** `FeatureState` (the
+class tracking rolling per-account/device history for every live
+transaction) has the exact same shape of bug -- shared mutable state,
+read then updated, called from the same thread pool. Didn't wait to
+reproduce a specific corrupted feature value before fixing it; the same
+mechanism that broke the ledger applies here, and a silently wrong
+velocity count is a worse bug than a crash because nothing would visibly
+signal it happened. Added the same locking pattern.
+
+This is worth being direct about: this bug would NOT have been visible in
+any of the single-request testing done on previous days. It only exists
+under real concurrent load, and finding it required actually generating
+that load against the live server rather than reasoning about
+correctness in the abstract.
+
+---
+
+## [Aug 24] Adversarial testing day, part 2: the injection defense had a real gap
+
+Day 2's prompt-injection test used a mock and confirmed the INTENDED
+behavior (the model should treat embedded instructions as suspicious data,
+not commands). What it didn't test: whether the delimiter scheme itself
+--the `<untrusted_data>` tags marking where untrusted content starts and
+ends -- could be broken out of at the string level, regardless of what the
+model does with it. Tested that directly today, without needing a real API
+key, since it's a property of the prompt-building code, not the model.
+
+Built a malicious `merchant_note` field containing the literal text
+`</untrusted_data>` followed by fake instructions, followed by a fake
+`<untrusted_data>` reopening. Checked the resulting prompt string:
+the literal closing and opening tags each appeared TWICE -- once as the
+real boundary, once as attacker-controlled text impersonating one. JSON
+string escaping protects quotes, newlines, and backslashes, but does
+NOT escape `<`, `>`, or `/` -- so a fixed, guessable tag name can be
+typed directly into any field that ends up inside the prompt, and it will
+appear as a structurally-identical-looking tag. A model relying on
+sequential text-matching rather than strict JSON-boundary awareness could
+plausibly be confused about where the real data section ends.
+
+**Fix:** generate a random, unpredictable boundary tag
+(`data_<16 hex chars>`) fresh for every single request, and build both the
+system prompt and user prompt around that same per-request token. An
+attacker crafting a malicious field in advance has no way to know what
+tag will be used for a request that hasn't happened yet, so they cannot
+pre-embed a matching fake boundary. Verified directly: re-ran the same
+attack after the fix -- the real boundary tag appears exactly once, the
+attacker's guessed `</untrusted_data>` text still appears (it's still
+just data, which is correct) but no longer matches anything the model was
+told to treat as a real boundary.
+
+**Also checked, while on the subject of injected content reaching
+somewhere unsafe:** whether a malicious string that made it into the
+audit ledger's `evidence` field could execute as HTML/JS in the React
+dashboard (stored XSS). Checked the frontend source directly for
+`dangerouslySetInnerHTML`, `innerHTML`, or `eval` -- none exist anywhere.
+All text renders through JSX's default interpolation, which auto-escapes
+HTML. This is a real, verifiable property of the code, not an assumption
+-- worth stating plainly rather than just asserting "React is safe" without
+checking this specific codebase actually stayed inside that guarantee.

@@ -13,6 +13,7 @@ features.py (batch/offline) and the live API import and reuse it.
 """
 
 import math
+import threading
 from collections import defaultdict
 
 
@@ -47,11 +48,30 @@ class FeatureState:
         self.device_recent_times = defaultdict(list)
         self.ipprefix_recent_times = defaultdict(list)
         self.account_created_at = {}
+        # Same reasoning as audit_ledger.py's lock: this state is shared and
+        # mutated by every request, and FastAPI runs sync endpoints across a
+        # thread pool within one process. Without this, two concurrent
+        # transactions for the same account/device could each read stale
+        # velocity counts before either writes back -- not a crash, a
+        # silent, hard-to-notice wrong-number bug, which is worse. Added
+        # proactively after the same class of bug was CONFIRMED (not just
+        # theorized) in the audit ledger under concurrent load.
+        self._lock = threading.Lock()
 
     def register_account(self, account_id, created_at):
         self.account_created_at[account_id] = created_at
 
     def compute_and_update(
+        self, account_id, ts, device_id, ip_address, amount, lat, lon,
+        is_new_geo_flag: bool, status: str,
+    ) -> dict:
+        with self._lock:
+            return self._compute_and_update_locked(
+                account_id, ts, device_id, ip_address, amount, lat, lon,
+                is_new_geo_flag, status,
+            )
+
+    def _compute_and_update_locked(
         self, account_id, ts, device_id, ip_address, amount, lat, lon,
         is_new_geo_flag: bool, status: str,
     ) -> dict:
