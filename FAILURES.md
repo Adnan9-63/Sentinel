@@ -372,3 +372,45 @@ All text renders through JSX's default interpolation, which auto-escapes
 HTML. This is a real, verifiable property of the code, not an assumption
 -- worth stating plainly rather than just asserting "React is safe" without
 checking this specific codebase actually stayed inside that guarantee.
+
+---
+
+## [Aug 26] Grounding check: catching a class of bug schema validation can't
+
+Schema validation (RiskDecision + Pydantic) guarantees the LLM's output has
+the right SHAPE -- a valid action, a confidence in range, a non-empty
+evidence list. It says nothing about whether the CONTENT is actually true.
+A model could return a perfectly well-formed decision whose evidence cites
+a number that was never anywhere in the input -- fabricated, not malformed
+-- and the schema would happily accept it.
+
+Built a lightweight grounding check: extract specific numbers mentioned in
+the model's evidence/rationale, and verify each one corresponds to a real
+value in the actual input data (with reasonable tolerance for rounding).
+Tested both directions directly: well-grounded evidence citing real input
+values produces zero warnings; evidence citing a fabricated number (e.g.
+"340 prior verified transactions" when nothing in the input said 340) gets
+correctly flagged.
+
+**The real design decision, not just the check itself:** what happens when
+a flagged case's action was "allow"? Trusting an "allow" backed by
+fabricated evidence would defeat the whole point. Wired it so a grounding
+warning on an "allow" decision forces the case to human review regardless
+-- verified directly: an honest, well-grounded "allow" stays allowed; an
+"allow" with a fabricated number gets overridden to flagged_for_review.
+
+Deliberately kept this informational rather than a hard rejection of the
+whole decision (unlike schema validation, which does hard-reject) --
+documented why in the module itself: the check has real false-positive
+potential of its own (a model saying "roughly 20" for an actual value of
+22 shouldn't be treated as a lie), so a warning is surfaced for a human to
+weigh rather than silently discarding a decision that might be correct.
+
+This mirrors a principle Razorpay itself published for Agent Studio --
+"out-of-scope behavior detection" as part of the validation layer -- found
+while researching how Sentinel's existing design already lined up with
+Razorpay's own stated direction (see the new README section). Built here
+independently rather than just cited, since the same reasoning applies
+regardless of whose platform this runs on: a fabricated but well-formatted
+claim is a real, distinct failure mode from a malformed one, and deserves
+its own defense.

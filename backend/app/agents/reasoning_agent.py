@@ -34,6 +34,7 @@ import secrets
 from pydantic import ValidationError
 
 from app.schemas.risk_decision import RiskDecision
+from app.core.grounding_check import check_grounding
 
 MODEL = "claude-sonnet-4-6"
 

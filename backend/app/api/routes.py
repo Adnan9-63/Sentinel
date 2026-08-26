@@ -53,6 +53,7 @@ def _score_and_triage(txn: dict, feature_state) -> dict:
         "risk_score": risk_score,
         "final_status": result.final_status,
         "evidence": result.evidence_summary,
+        "grounding_warnings": result.grounding_warnings,
         "llm_confidence": result.decision.confidence if result.decision else None,
         "llm_rationale": result.decision.rationale if result.decision else None,
         "features": feats,

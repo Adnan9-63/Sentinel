@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 
 from app.agents.reasoning_agent import get_risk_decision, call_llm_live
 from app.schemas.risk_decision import RiskDecision
+from app.core.grounding_check import check_grounding
 
 LOW_THRESHOLD = 0.40
 HIGH_THRESHOLD = 0.85
@@ -42,6 +43,7 @@ class TriageResult:
     final_status: str  # "allowed" | "flagged_for_review" -- never "blocked"
     decision: RiskDecision | None = None
     evidence_summary: list[str] = field(default_factory=list)
+    grounding_warnings: list[str] = field(default_factory=list)
 
 
 def _deterministic_evidence(feature_context: dict) -> list[str]:
@@ -93,12 +95,25 @@ def triage(
     if risk_score < HIGH_THRESHOLD:
         decision = get_risk_decision(feature_context, ring_context, llm_caller=llm_caller)
         final_status = "allowed" if decision.action == "allow" else "flagged_for_review"
+
+        # Grounding check: does the model's own evidence actually correspond
+        # to real values in the input, or does it cite something fabricated?
+        # This runs regardless of the model's chosen action -- an "allow"
+        # backed by a fabricated number is exactly the case worth catching.
+        # A flagged mismatch does NOT get silently trusted: it forces the
+        # case to human review even if the model said "allow", because an
+        # ungrounded "allow" is less trustworthy than an ungrounded "review".
+        warnings = check_grounding(decision.evidence, decision.rationale, feature_context, ring_context)
+        if warnings and final_status == "allowed":
+            final_status = "flagged_for_review"
+
         return TriageResult(
             path="llm_reasoned",
             risk_score=risk_score,
             final_status=final_status,
             decision=decision,
             evidence_summary=decision.evidence,
+            grounding_warnings=warnings,
         )
 
     # score >= HIGH_THRESHOLD: obvious enough to skip the LLM entirely
