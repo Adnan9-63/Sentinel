@@ -88,16 +88,82 @@ sentinel/
                      "what broke and how you got out" submission question)
 ```
 
+## How Sentinel fits Razorpay's own AI direction
+
+Grounded in Razorpay's own public engineering output, not guesswork.
+
+### Sentinel already matches Razorpay's own stated Agent Studio principles
+
+Razorpay launched Agent Studio in March 2026, built on Anthropic's Claude
+Agent SDK, and published explicit design principles for agents on their
+platform. Sentinel was built independently of that article -- the match
+below is the same conclusion arrived at separately, not reverse-engineered
+from it:
+
+| Razorpay's stated principle | Sentinel's matching design |
+|---|---|
+| "No agent takes an irreversible action without explicit merchant approval" | Triage gate never auto-blocks -- always routes high-risk cases to human review |
+| "Review-first mode: the agent does the work... holds it for the merchant to review" | The LLM-reasoned path, exactly |
+| "Every action passes through a validation layer... scope checks... out-of-scope behavior detection" | Pydantic schema gate, deterministic fallback, and a grounding check on the LLM's own output (app/core/grounding_check.py) |
+| "Every single action is logged with a full audit trail... what the agent did, when, and why" | Hash-chained, tamper-evident audit ledger |
+
+### A binding regulatory hook, not a future trend
+
+RBI's Authentication Mechanisms for Digital Payment Transactions
+Directions, 2025 took effect April 1, 2026 -- mandating risk-based
+authentication (calibrating security checks to each transaction's risk
+profile) and making platforms liable for losses from security failures.
+Razorpay is already operating under this requirement today.
+
+### Positioned against what Razorpay has already built, not ignoring it
+
+- **Thirdwatch** (acquired 2019): ML-based device fingerprinting and risk
+  scoring. A scoring engine -- no structured, human-readable explanation
+  layer for why a specific decision was made.
+- **Chargeback Shield**: ML risk engine that also assumes financial
+  liability for chargeback fraud.
+- **Bumblebee** (Razorpay Engineering, Dec 2025): a multi-agent
+  orchestrator for merchant onboarding risk review. Different surface
+  area (pre-onboarding, not transaction-level), but it validates the same
+  architectural philosophy Sentinel uses -- specialized layers instead of
+  one monolithic model. Their own writeup: "the first architecture that
+  works is rarely the architecture that scales."
+- **Vulcan** (announced days before this was written): a new foundation
+  model unifying routing, fraud, and checkout intelligence across
+  Razorpay's network, including network-level fraud pattern detection
+  across thousands of merchants.
+
+Vulcan is a detection engine at a scale no buildathon project should try
+to compete with. What Razorpay's own announcement of it does not describe
+is an explainability or audit layer -- no mention of how a flagged
+merchant or transaction gets a specific, evidence-backed reason, or how a
+human reviewer's decision gets permanently logged. That is deliberately
+Sentinel's actual niche: not a competing detection engine, but the
+bounded, transparent reasoning and audit layer that could sit on top of
+any detection signal -- its own ensemble, or a signal from something like
+Vulcan.
+
 ## Build log / timeline
 
-- Aug 22-23: repo scaffold, synthetic data generator, feature schema
-- Aug 24-26: detection engine (graph clustering + ML ensemble), baseline metrics
-- Aug 27-28: LLM reasoning layer + Pydantic gate + audit ledger
-- Aug 29-31: off (MLH Fellowship)
-- Sep 1-2: React dashboard
-- Sep 3: adversarial testing (prompt injection, malformed payloads, concurrent load)
-- Sep 4: README/architecture polish, write-up from FAILURES.md
-- Sep 5: record demo video, submit
+Original plan vs. what actually happened -- kept both rather than quietly
+rewriting history:
+
+- Aug 22: repo scaffold, synthetic data generator, feature engineering,
+  graph-based ring detection, ML ensemble (all in one day, ahead of the
+  original schedule)
+- Aug 23: FastAPI backend, live single-transaction scoring, found and
+  fixed a real data-leakage bug (account age) via live testing
+- Aug 24: React dashboard, adversarial testing day -- found and fixed a
+  concurrency race condition and a prompt-injection delimiter
+  vulnerability
+- Aug 26: Razorpay-specific research pass, positioning against Agent
+  Studio/Bumblebee/Vulcan, scope-check addition on the LLM reasoning layer
+- Aug 27-31: remaining polish, expanded adversarial coverage, write-up
+- Sep 1-4: demo video, final README pass
+- Sep 5: submit
+
+(Timeline compressed and reprioritized on Aug 26 -- full build now targeted
+for Aug 31 instead of Sep 3, giving more buffer before the Sep 5 deadline.)
 
 ## Running it locally
 
