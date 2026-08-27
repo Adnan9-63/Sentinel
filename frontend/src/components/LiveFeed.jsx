@@ -67,6 +67,25 @@ function Entry({ entry, isLast, expanded, onToggle }) {
                 ))}
               </ul>
             </div>
+            {entry.grounding_warnings && entry.grounding_warnings.length > 0 && (
+              <div className="bg-review/10 border border-review/30 rounded-md p-2">
+                <div className="text-[10px] uppercase tracking-wider text-review mb-1">
+                  Grounding check flagged this
+                </div>
+                <ul className="space-y-1">
+                  {entry.grounding_warnings.map((w, i) => (
+                    <li key={i} className="text-xs text-review/90 flex gap-2">
+                      <span className="shrink-0">⚠</span>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-[10px] text-muted mt-1">
+                  A claim in the AI's own reasoning didn't match the real input data —
+                  forced to human review regardless of what the AI recommended.
+                </div>
+              </div>
+            )}
             {entry.ring_context && (
               <div className="text-xs text-review">
                 Member of a flagged {entry.ring_context.cluster_type === 'coordinated_ring' ? 'coordinated ring' : 'card-testing cluster'}

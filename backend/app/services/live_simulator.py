@@ -11,7 +11,7 @@ the demo.
 
 import uuid
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 
 CITIES = {
@@ -38,7 +38,7 @@ def new_ip(prefix=None):
 
 def simulate_normal_transaction(account_row, now=None):
     """One ordinary transaction for an existing, real account."""
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     lat, lon = _jitter(account_row["home_lat"], account_row["home_lon"], km_std=8)
     amount = float(np.round(np.random.lognormal(mean=6.5, sigma=0.9), 2))
     amount = min(amount, 45000)
@@ -58,7 +58,7 @@ def simulate_normal_transaction(account_row, now=None):
 def simulate_ato_transaction(account_row, now=None):
     """A takeover-style transaction for an existing account: new device, new
     city, unusually large amount -- the loud variant, for a clear demo."""
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     other_cities = [c for c in CITIES if c != account_row.get("home_city")]
     city = np.random.choice(other_cities) if other_cities else list(CITIES.keys())[0]
     lat, lon = _jitter(*CITIES[city], km_std=3)
@@ -81,7 +81,7 @@ def simulate_card_testing_burst(n=15, now=None):
     pool against synthetic target accounts, seconds apart -- returns a list
     so the caller can feed them through the pipeline one at a time and watch
     device_velocity_1h (and the resulting risk score) climb across the burst."""
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     attacker_devices = [new_device_id() for _ in range(3)]
     ip_prefix = f"{np.random.randint(10, 223)}.{np.random.randint(0, 255)}"
     txns = []
