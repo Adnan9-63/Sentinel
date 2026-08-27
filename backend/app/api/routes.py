@@ -25,11 +25,21 @@ from app.services.live_simulator import (
 router = APIRouter()
 
 
-def _score_and_triage(txn: dict, feature_state) -> dict:
+def _score_and_triage(txn: dict, feature_state, ring_context_override=None) -> dict:
     """Shared logic for both the simulate endpoints: compute features, score
     with the ML ensemble, check ring membership, run the triage gate, log
     the decision. Imported lazily from app.api.main to avoid a circular
-    import at module load time."""
+    import at module load time.
+
+    ring_context_override lets a caller supply a ring context computed
+    LIVE (e.g. from a just-generated burst) instead of relying solely on
+    state.ring_map, which is only computed once at startup from historical
+    data. Without this, a coordinated attack pattern formed entirely during
+    a live demo would score correctly on its own transaction-level features
+    (velocity, device reuse) but would never get annotated as part of a
+    ring -- the individual risk score still catches it, but the richer
+    "this is a coordinated attack" explanation would silently never appear.
+    Found by testing exactly that scenario, not by inspection alone."""
     from app.api.main import state
 
     feats = feature_state.compute_and_update(
@@ -42,7 +52,7 @@ def _score_and_triage(txn: dict, feature_state) -> dict:
     combined, iso_s, gbt_s = ensemble_score(state.scaler, state.iso, state.gbt, X, state.iso_calibration)
     risk_score = float(combined[0])
 
-    ring_context = state.ring_map.get(txn["account_id"])
+    ring_context = ring_context_override or state.ring_map.get(txn["account_id"])
 
     result = triage(risk_score=risk_score, feature_context=feats, ring_context=ring_context)
 
@@ -141,6 +151,36 @@ def simulate_ato():
 @router.post("/simulate/card_testing_burst")
 def simulate_burst(n: int = Query(15, ge=3, le=50)):
     from app.api.main import state
+    from app.services.ring_detection import build_account_graph, score_clusters
+
     txns = simulate_card_testing_burst(n=n)
-    results = [_score_and_triage(txn, state.feature_state) for txn in txns]
-    return {"n": len(results), "results": results}
+
+    # Run ring detection on JUST this live batch -- the burst's transactions
+    # share a small attacker device pool by construction, so this batch
+    # alone should form a real cluster even though these accounts have no
+    # history in state.ring_map (which only knows about historical data).
+    # Cheap: this is n<=50 rows, not the full dataset.
+    burst_df = pd.DataFrame(txns)
+    burst_df["timestamp"] = pd.to_datetime(burst_df["timestamp"])
+    burst_df["status"] = burst_df["status"]
+    live_ring_context = {}
+    try:
+        G = build_account_graph(burst_df, min_shared_events_by_type={"device_id": 1, "ip_prefix": 4})
+        clusters = score_clusters(G, burst_df, min_cluster_size=3)
+        for _, row in clusters[clusters["ring_risk_score"] >= 0.2].iterrows():
+            for acc in row["account_ids"]:
+                live_ring_context[acc] = {
+                    "cluster_type": row["cluster_type"],
+                    "ring_risk_score": float(row["ring_risk_score"]),
+                    "cluster_size": int(row["n_accounts"]),
+                    "detected": "live",  # distinguishes from historical-batch detections
+                }
+    except Exception:
+        pass  # ring detection on the live batch is a best-effort enrichment,
+              # never something that should break the simulate endpoint itself
+
+    results = [
+        _score_and_triage(txn, state.feature_state, ring_context_override=live_ring_context.get(txn["account_id"]))
+        for txn in txns
+    ]
+    return {"n": len(results), "results": results, "live_ring_detected": len(live_ring_context) > 0}
