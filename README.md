@@ -16,6 +16,14 @@ is built around both halves.
 
 ## What Sentinel does
 
+![Sentinel dashboard - live decision chain](docs/dashboard_screenshot.png)
+
+*The live decision chain after two real simulated transactions — a
+takeover attempt (risk 0.620, flagged for review) and an ordinary
+purchase (risk 0.073, allowed). This is an actual screenshot of the
+running app, not a mockup.*
+
+
 1. **Detects coordinated fraud rings**, not just single suspicious transactions —
    bot-driven / AI-orchestrated attack clusters that share device fingerprints,
    IP proximity, and synchronized timing across nominally "unrelated" accounts.
@@ -168,6 +176,16 @@ rewriting history:
 
 (Timeline compressed and reprioritized on Aug 26 -- full build now targeted
 for Aug 31 instead of Sep 3, giving more buffer before the Sep 5 deadline.)
+
+## Results at a glance
+
+Every real, measured number from this project -- ML precision/recall,
+false-positive cost analysis, ring detection accuracy, and the full
+19-test adversarial suite -- is consolidated in **[BENCHMARKS.md](BENCHMARKS.md)**.
+
+To test the reasoning layer against the real Anthropic API (this build
+environment has none, disclosed throughout `FAILURES.md`), run
+`backend/tests/test_live_llm.py` locally with your own `ANTHROPIC_API_KEY`.
 
 ## Running it locally
 
