@@ -1,0 +1,121 @@
+<svg viewBox="0 0 900 1180" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans', 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2A3448"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="1180" fill="#FFFFFF"/>
+
+  <text x="450" y="42" text-anchor="middle" font-size="22" font-weight="600" fill="#0E1420">Sentinel — Architecture</text>
+  <text x="450" y="64" text-anchor="middle" font-size="12.5" fill="#6B7385">Coordinated abuse-ring &amp; fraud-spike detector, with a bounded, explainable reasoning layer</text>
+
+  <!-- Transaction stream -->
+  <rect x="320" y="95" width="260" height="46" rx="8" fill="#161D2C"/>
+  <text x="450" y="123" text-anchor="middle" font-size="13.5" fill="#FFFFFF" font-weight="500">Transaction Stream</text>
+  <line x1="450" y1="141" x2="450" y2="166" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Feature engineering -->
+  <rect x="250" y="168" width="400" height="58" rx="8" fill="#F4F6FA" stroke="#2A3448" stroke-width="1.5"/>
+  <text x="450" y="192" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0E1420">Causal Feature Engineering</text>
+  <text x="450" y="210" text-anchor="middle" font-size="11" fill="#6B7385">FeatureState — velocity, geo-jump, amount z-score, device reuse (no future leakage)</text>
+  <line x1="450" y1="226" x2="450" y2="251" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Split into two detection paths -->
+  <line x1="450" y1="251" x2="230" y2="272" stroke="#2A3448" stroke-width="2"/>
+  <line x1="450" y1="251" x2="670" y2="272" stroke="#2A3448" stroke-width="2"/>
+
+  <!-- Graph layer -->
+  <rect x="70" y="274" width="320" height="72" rx="8" fill="#F4F6FA" stroke="#4FD1C5" stroke-width="1.5"/>
+  <text x="230" y="298" text-anchor="middle" font-size="13" font-weight="600" fill="#0E1420">Graph-Based Ring Detection</text>
+  <text x="230" y="315" text-anchor="middle" font-size="10.5" fill="#6B7385">Shared device / IP-prefix clustering</text>
+  <text x="230" y="330" text-anchor="middle" font-size="10.5" fill="#6B7385">Per-signal-type edge thresholds</text>
+
+  <!-- ML ensemble -->
+  <rect x="510" y="274" width="320" height="72" rx="8" fill="#F4F6FA" stroke="#4FD1C5" stroke-width="1.5"/>
+  <text x="670" y="298" text-anchor="middle" font-size="13" font-weight="600" fill="#0E1420">ML Ensemble</text>
+  <text x="670" y="315" text-anchor="middle" font-size="10.5" fill="#6B7385">Isolation Forest + Gradient Boosted Trees</text>
+  <text x="670" y="330" text-anchor="middle" font-size="10.5" fill="#6B7385">Fixed-calibration single-transaction scoring</text>
+
+  <line x1="230" y1="346" x2="450" y2="378" stroke="#2A3448" stroke-width="2"/>
+  <line x1="670" y1="346" x2="450" y2="378" stroke="#2A3448" stroke-width="2"/>
+  <line x1="450" y1="378" x2="450" y2="393" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Triage gate -->
+  <rect x="250" y="395" width="400" height="66" rx="8" fill="#161D2C"/>
+  <text x="450" y="421" text-anchor="middle" font-size="13.5" font-weight="600" fill="#FFFFFF">Triage Gate</text>
+  <text x="450" y="440" text-anchor="middle" font-size="10.5" fill="#AEB6C7">Thresholds set from the measured score distribution, not guessed</text>
+  <text x="450" y="453" text-anchor="middle" font-size="10" fill="#7A8299">"block" is never auto-executed — only a human can freeze an account</text>
+
+  <!-- Three outcome arrows -->
+  <line x1="350" y1="461" x2="140" y2="500" stroke="#2A3448" stroke-width="2"/>
+  <line x1="450" y1="461" x2="450" y2="500" stroke="#2A3448" stroke-width="2"/>
+  <line x1="550" y1="461" x2="760" y2="500" stroke="#2A3448" stroke-width="2"/>
+
+  <!-- Auto allow -->
+  <rect x="40" y="502" width="200" height="52" rx="8" fill="#EAF7EF" stroke="#6FCF97" stroke-width="1.5"/>
+  <text x="140" y="524" text-anchor="middle" font-size="12" font-weight="600" fill="#1F7A46">score &lt; 0.40</text>
+  <text x="140" y="541" text-anchor="middle" font-size="11" fill="#1F7A46">Auto-allow, log only</text>
+
+  <!-- LLM reasoning -->
+  <rect x="350" y="502" width="200" height="52" rx="8" fill="#FEF6E7" stroke="#F2B84B" stroke-width="1.5"/>
+  <text x="450" y="524" text-anchor="middle" font-size="12" font-weight="600" fill="#8A5E13">0.40 – 0.85</text>
+  <text x="450" y="541" text-anchor="middle" font-size="11" fill="#8A5E13">LLM Reasoning Layer</text>
+
+  <!-- Auto flag -->
+  <rect x="660" y="502" width="200" height="52" rx="8" fill="#FCECEF" stroke="#E8637A" stroke-width="1.5"/>
+  <text x="760" y="524" text-anchor="middle" font-size="12" font-weight="600" fill="#A32B44">score ≥ 0.85</text>
+  <text x="760" y="541" text-anchor="middle" font-size="11" fill="#A32B44">Auto-flag, skip LLM</text>
+
+  <line x1="450" y1="554" x2="450" y2="579" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- LLM reasoning detail box -->
+  <rect x="180" y="581" width="540" height="150" rx="8" fill="#F4F6FA" stroke="#2A3448" stroke-width="1.5"/>
+  <text x="450" y="605" text-anchor="middle" font-size="13" font-weight="600" fill="#0E1420">Bounded LLM Reasoning</text>
+
+  <rect x="200" y="618" width="235" height="90" rx="6" fill="#FFFFFF" stroke="#2A3448" stroke-width="1"/>
+  <text x="317" y="638" text-anchor="middle" font-size="11" font-weight="600" fill="#0E1420">Random per-request</text>
+  <text x="317" y="652" text-anchor="middle" font-size="11" font-weight="600" fill="#0E1420">boundary tag</text>
+  <text x="317" y="670" text-anchor="middle" font-size="9.5" fill="#6B7385">Untrusted data can never</text>
+  <text x="317" y="683" text-anchor="middle" font-size="9.5" fill="#6B7385">spoof the real delimiter</text>
+  <text x="317" y="696" text-anchor="middle" font-size="9.5" fill="#6B7385">(tested — see FAILURES.md)</text>
+
+  <rect x="465" y="618" width="235" height="90" rx="6" fill="#FFFFFF" stroke="#2A3448" stroke-width="1"/>
+  <text x="582" y="638" text-anchor="middle" font-size="11" font-weight="600" fill="#0E1420">Pydantic schema +</text>
+  <text x="582" y="652" text-anchor="middle" font-size="11" font-weight="600" fill="#0E1420">grounding check</text>
+  <text x="582" y="670" text-anchor="middle" font-size="9.5" fill="#6B7385">Malformed output → fail-safe</text>
+  <text x="582" y="683" text-anchor="middle" font-size="9.5" fill="#6B7385">Fabricated evidence on "allow"</text>
+  <text x="582" y="696" text-anchor="middle" font-size="9.5" fill="#6B7385">→ forced to human review</text>
+
+  <line x1="450" y1="731" x2="450" y2="756" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- converge -->
+  <line x1="140" y1="554" x2="140" y2="768" stroke="#2A3448" stroke-width="2"/>
+  <line x1="140" y1="768" x2="248" y2="768" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="760" y1="554" x2="760" y2="768" stroke="#2A3448" stroke-width="2"/>
+  <line x1="760" y1="768" x2="652" y2="768" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Audit ledger -->
+  <rect x="250" y="758" width="400" height="66" rx="8" fill="#161D2C"/>
+  <text x="450" y="784" text-anchor="middle" font-size="13.5" font-weight="600" fill="#FFFFFF">Audit Ledger</text>
+  <text x="450" y="802" text-anchor="middle" font-size="10.5" fill="#AEB6C7">Hash-chained, append-only — every decision permanently traceable</text>
+  <text x="450" y="815" text-anchor="middle" font-size="10" fill="#7A8299">Tampering is detectable, not just "logged"</text>
+
+  <line x1="450" y1="824" x2="450" y2="849" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Dashboard -->
+  <rect x="300" y="851" width="300" height="52" rx="8" fill="#4FD1C5"/>
+  <text x="450" y="882" text-anchor="middle" font-size="13" font-weight="600" fill="#0E1420">React Dashboard</text>
+
+  <!-- Footer note -->
+  <rect x="70" y="935" width="760" height="200" rx="10" fill="#F4F6FA" stroke="#2A3448" stroke-width="1"/>
+  <text x="450" y="965" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0E1420">Every fix on this diagram was found by testing, not designed in from the start</text>
+  <text x="90" y="992" font-size="10.5" fill="#3D4356">• Fixed calibration bounds — a batch-relative Isolation Forest score was silently 0.0 for every single live transaction</text>
+  <text x="90" y="1013" font-size="10.5" fill="#3D4356">• Per-signal-type edge thresholds — coincidental IP overlap among unrelated users created a 435-account false ring</text>
+  <text x="90" y="1034" font-size="10.5" fill="#3D4356">• New-signup account cohort — the model had learned "brand new account = fraud" from a data-leakage shortcut (85% of its decision weight)</text>
+  <text x="90" y="1055" font-size="10.5" fill="#3D4356">• Random boundary tag — a fixed delimiter name could be spoofed by an attacker typing the literal closing tag into any field</text>
+  <text x="90" y="1076" font-size="10.5" fill="#3D4356">• threading.Lock on the ledger and FeatureState — 60 concurrent requests silently forked the "tamper-evident" hash chain</text>
+  <text x="90" y="1097" font-size="10.5" fill="#3D4356">• Live ring detection on burst simulations — a coordinated pattern formed live was invisible to the startup-only ring map</text>
+  <text x="450" y="1122" text-anchor="middle" font-size="10" fill="#6B7385" font-style="italic">Full detail on every one of these, including the exact numbers, is in FAILURES.md</text>
+
+</svg>

@@ -35,6 +35,10 @@ is built around both halves.
 
 ## Architecture
 
+![Sentinel architecture diagram](architecture.svg)
+
+Text version, for anyone viewing this without image rendering:
+
 ```
 Synthetic Transaction Stream
         |
