@@ -65,6 +65,44 @@ device). See `FAILURES.md` for the full investigation of why this
 particular pattern is still the hardest one to catch, and what was
 already tried (sample weighting) to narrow the gap.
 
+### What precision actually looks like at real fraud rates, not our test rate
+
+The numbers above are measured on a test set with a 5.16% fraud rate --
+deliberately oversampled so the model has enough positive examples to
+learn from (see `data_generator.py`). Real payment fraud rates are under
+1%, often 0.1-0.5%. Precision is not base-rate-invariant: the same
+detector, at the same recall, produces very different precision depending
+on how rare fraud actually is in the population it's watching. Reporting
+"1.000 precision" without this context is technically true and
+practically misleading.
+
+There's a second, sharper problem: 0 false positives were observed among
+2,407 negative test examples. The naive reading is "precision is 100% at
+any base rate." That's overconfident -- 0 observed events in a finite
+sample does not mean the true rate is 0. `base_rate_analysis.py` uses the
+Clopper-Pearson exact one-sided 95% confidence bound instead: the
+statistically correct answer to "how bad could the true false-positive
+rate plausibly be, given what was actually observed."
+
+| Fraud prevalence | Precision (naive, trusts FPR=0) | Precision (95% confidence bound) |
+|---|---|---|
+| 5.16% (our test rate) | 100.0% | 97.6% |
+| 1.0% | 100.0% | 88.3% |
+| 0.5% | 100.0% | 79.0% |
+| 0.1% (closer to real card fraud) | 100.0% | 42.8% |
+| 0.05% | 100.0% | 27.2% |
+
+Read plainly: at fraud rates closer to what a real payments platform
+actually sees, precision could plausibly be as low as the low 40s or even
+high 20s under a statistically defensible worst case -- meaning more than
+half of flagged transactions could be false alarms at true production
+scale, even with this detector's strong measured recall (93.1%). This
+isn't a flaw discovered after the fact and hidden; it's the honest answer
+to a question worth asking before someone else asks it first. It also
+means the false-positive-cost story in the table above understates the
+real cost by roughly an order of magnitude once you leave the synthetic
+test distribution.
+
 ## Graph-based ring detection
 
 Measured against planted ground truth (184 real fraud accounts across
@@ -130,7 +168,8 @@ Full before/after numbers for both are in `FAILURES.md`.
   Anthropic API in this build environment (no API key available here).
   Every reasoning-layer test uses either a mock or the fail-safe fallback
   path. This is the single largest remaining gap before submission.
-- Real-world fraud rates are far lower than this dataset's 5.16% --
-  precision at very low base rates is harder than these numbers show, and
-  that's a known property of any fraud benchmark built on oversampled
-  synthetic data, not specific to this one.
+- The base-rate precision projection above uses a statistical confidence
+  bound, not a second empirical test set collected at real fraud
+  prevalence -- that data doesn't exist for this project. It's the
+  rigorous answer available without one, not a substitute for eventually
+  validating against real, low-prevalence traffic.
