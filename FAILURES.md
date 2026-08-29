@@ -601,3 +601,14 @@ One harmless side effect surfaced by the newer numpy: a deprecation
 warning from inside joblib's own internals (not our code), firing 1210
 times across the test run. Not a bug, just noise -- suppressed via
 pytest.ini rather than left cluttering otherwise-clean test output.
+
+**Confirmed on real, independent hardware, same day:** Adnan ran the full
+documented sequence on his own Windows 11 machine, Python 3.13, a
+completely different environment from the one this was built and tested
+in. Every number matched exactly -- 620 accounts, 8457 transactions,
+5.16% fraud rate, precision 1.000/recall 0.931/F1 0.964/ROC-AUC 0.997,
+ring detection 100%/79.9% primary. The FastAPI server started cleanly and
+served the interactive docs. This is stronger evidence than any amount of
+sandbox-only testing: the two most severe bugs found this week (the
+hardcoded paths, the Windows dependency failure) are now verified fixed
+on the actual machine this needs to work on for the demo.
