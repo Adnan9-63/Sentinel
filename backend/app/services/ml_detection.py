@@ -30,8 +30,9 @@ from sklearn.metrics import (
     precision_score, recall_score, f1_score, confusion_matrix,
     roc_auc_score, precision_recall_curve,
 )
+from app.core.paths import DATA_DIR, MODEL_DIR as _MODEL_DIR
 
-MODEL_DIR = "/home/claude/sentinel/backend/app/core/trained_models"
+MODEL_DIR = str(_MODEL_DIR)
 
 FEATURE_COLS = [
     "velocity_1h", "velocity_24h", "device_velocity_1h", "ip_velocity_1h",
@@ -49,7 +50,7 @@ FRAUD_LABELS = {"card_testing", "card_testing_stealthy", "ato", "ato_stealthy", 
 
 
 def load_and_split(test_size=0.3, random_state=42):
-    df = pd.read_csv("/home/claude/sentinel/data/features.csv")
+    df = pd.read_csv(DATA_DIR / "features.csv")
     df["is_fraud"] = df["label"].isin(FRAUD_LABELS).astype(int)
 
     X = df[FEATURE_COLS].fillna(0)
@@ -208,7 +209,7 @@ if __name__ == "__main__":
     df_test["risk_score"] = combined_score
     df_test["iso_score"] = iso_score
     df_test["gbt_score"] = gbt_score
-    df_test.to_csv("/home/claude/sentinel/data/scored_test_set.csv", index=False)
+    df_test.to_csv(DATA_DIR / "scored_test_set.csv", index=False)
     print("\nSaved scored test set to data/scored_test_set.csv")
 
     save_ensemble(scaler, iso, gbt, iso_calibration)

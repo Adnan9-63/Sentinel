@@ -26,6 +26,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 from itertools import combinations
+from app.core.paths import DATA_DIR
 
 
 def build_account_graph(
@@ -222,8 +223,8 @@ def evaluate_against_ground_truth(clusters_df: pd.DataFrame, accounts_df: pd.Dat
 
 
 if __name__ == "__main__":
-    txns = pd.read_csv("/home/claude/sentinel/data/transactions.csv")
-    accounts = pd.read_csv("/home/claude/sentinel/data/accounts.csv")
+    txns = pd.read_csv(DATA_DIR / "transactions.csv")
+    accounts = pd.read_csv(DATA_DIR / "accounts.csv")
 
     G = build_account_graph(txns)
     print(f"Graph: {G.number_of_nodes()} accounts, {G.number_of_edges()} edges")
@@ -242,6 +243,6 @@ if __name__ == "__main__":
     evaluate_against_ground_truth(clusters_df, accounts, txns, threshold=0.3)
 
     clusters_df.drop(columns=["account_ids"]).to_csv(
-        "/home/claude/sentinel/data/ring_clusters_summary.csv", index=False
+        DATA_DIR / "ring_clusters_summary.csv", index=False
     )
     print("\nSaved to data/ring_clusters_summary.csv")

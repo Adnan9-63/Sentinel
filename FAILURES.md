@@ -519,3 +519,56 @@ rigorously-computed answer to a question a sharp reviewer would ask
 before we volunteered it. Added to BENCHMARKS.md as its own section
 rather than a footnote, specifically because burying an inconvenient
 number is worse than the number itself.
+
+---
+
+## [Aug 29] Clean-room test found a critical, submission-breaking bug
+
+Did something that should have been done days ago: instead of testing in
+the same sandbox everything had always been built and run in, copied the
+repo to a completely different, isolated location and followed the
+README's documented setup steps literally, with nothing assumed.
+
+It failed silently. Every single generated file -- the synthetic dataset,
+trained models, the audit ledger -- was writing to a hardcoded absolute
+path, /home/claude/sentinel/data/..., regardless of where the script was
+actually being run from. That path exists only in this one build sandbox.
+Running the exact same commands from /tmp/cleanroom produced an empty
+data directory and files silently written to a location that doesn't
+exist on any other machine -- not Adnan's Windows laptop, not a judge's
+machine, nowhere but here.
+
+This had been invisible for eight days of active building because every
+single test, every regression check, every screenshot, was run inside
+this same sandbox, where the hardcoded path happened to work by
+coincidence. Nobody had actually run this project from anywhere else --
+including, worth being direct about it, Adnan himself, who has only ever
+run git commands locally, never the actual Python backend.
+
+A mistake made while investigating this, corrected immediately: an early
+cleanroom-setup command accidentally targeted the real project's data/
+directory instead of the intended isolated copy, deleting the real
+generated files. Recovered cleanly and verified byte-for-byte identical
+results (data_generator.py is fixed-seed) -- no actual harm, but worth
+stating plainly rather than only mentioning the clean outcome.
+
+Fix: built app/core/paths.py, a single source of truth for every path in
+the project, computed relative to the file's own location on disk
+(Path(__file__).resolve()...) rather than hardcoded as an absolute
+string. This resolves correctly regardless of operating system or where
+the repo is cloned to. Updated all 8 affected files (data_generator.py,
+features.py, ring_detection.py, ml_detection.py, audit_ledger.py,
+base_rate_analysis.py, pipeline.py, api/main.py) -- 17 hardcoded path
+references in total, all replaced.
+
+Verified, not assumed fixed: re-ran the full documented setup sequence
+from /tmp/cleanroom2, an isolated location with a fresh Python virtual
+environment -- data generation, features, ring detection, ML training,
+the live API server, and the full 19-test adversarial suite. Every step
+produced identical numbers to the sandbox run and correctly wrote files
+to the cleanroom's own location, not the old hardcoded one.
+
+This is very likely the single most important bug found in this entire
+build. A submission that fails at git clone + follow the README is a
+submission a judge can't evaluate at all, regardless of how good
+everything else is.

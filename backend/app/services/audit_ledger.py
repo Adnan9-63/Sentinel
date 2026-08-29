@@ -21,8 +21,9 @@ import hashlib
 import os
 import threading
 from datetime import datetime, timezone
+from app.core.paths import DATA_DIR
 
-LEDGER_PATH = "/home/claude/sentinel/data/audit_ledger.jsonl"
+LEDGER_PATH = str(DATA_DIR / "audit_ledger.jsonl")
 GENESIS_HASH = "0" * 64
 
 # The chain is only valid if entries are appended strictly one at a time --

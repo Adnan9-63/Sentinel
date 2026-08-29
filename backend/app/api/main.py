@@ -23,8 +23,9 @@ import pandas as pd
 from app.core.feature_state import FeatureState
 from app.services.ml_detection import load_ensemble
 from app.services.ring_detection import build_account_graph, score_clusters
+from app.core.paths import DATA_DIR as _DATA_DIR
 
-DATA_DIR = "/home/claude/sentinel/data"
+DATA_DIR = str(_DATA_DIR)
 
 
 class AppState:

@@ -23,6 +23,7 @@ Run:
 
 import pandas as pd
 from scipy.stats import beta
+from app.core.paths import DATA_DIR
 
 
 def confusion_counts(scored_df: pd.DataFrame, threshold: float = 0.5):
@@ -53,7 +54,7 @@ def precision_at_prevalence(tpr: float, fpr: float, prevalence: float) -> float:
 
 
 def run(threshold: float = 0.5, confidence: float = 0.95):
-    df = pd.read_csv("/home/claude/sentinel/data/scored_test_set.csv")
+    df = pd.read_csv(DATA_DIR / "scored_test_set.csv")
     TP, FN, FP, TN = confusion_counts(df, threshold)
     n_negatives = FP + TN
     tpr = TP / (TP + FN)

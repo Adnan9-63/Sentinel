@@ -25,6 +25,7 @@ import pandas as pd
 
 from app.core.triage_gate import triage, LOW_THRESHOLD, HIGH_THRESHOLD
 from app.services.audit_ledger import log_decision, verify_chain, LEDGER_PATH
+from app.core.paths import DATA_DIR
 
 FEATURE_COLS = [
     "velocity_1h", "velocity_24h", "device_velocity_1h", "ip_velocity_1h",
@@ -76,7 +77,7 @@ def mock_reasonable_llm(system_prompt: str, user_prompt: str) -> str:
 
 def load_ring_context_map(threshold: float = 0.3) -> dict:
     """account_id -> ring context dict, for accounts in a flagged cluster."""
-    path = "/home/claude/sentinel/data/ring_clusters_summary.csv"
+    path = DATA_DIR / "ring_clusters_summary.csv"
     if not os.path.exists(path):
         return {}
     clusters = pd.read_csv(path)
@@ -85,7 +86,7 @@ def load_ring_context_map(threshold: float = 0.3) -> dict:
     # saving in ring_detection.py to keep the CSV flat) -- rebuild from the
     # graph directly instead for this integration run.
     from app.services.ring_detection import build_account_graph, score_clusters
-    txns = pd.read_csv("/home/claude/sentinel/data/transactions.csv")
+    txns = pd.read_csv(DATA_DIR / "transactions.csv")
     G = build_account_graph(txns)
     full_clusters = score_clusters(G, txns)
     full_flagged = full_clusters[full_clusters["ring_risk_score"] >= threshold]
@@ -105,7 +106,7 @@ def run(sample_size: int = 300, seed: int = 42):
     if os.path.exists(LEDGER_PATH):
         os.remove(LEDGER_PATH)
 
-    df = pd.read_csv("/home/claude/sentinel/data/scored_test_set.csv")
+    df = pd.read_csv(DATA_DIR / "scored_test_set.csv")
     ring_map = load_ring_context_map()
 
     # deliberately oversample the ambiguous middle band so this run actually

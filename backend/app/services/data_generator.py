@@ -22,6 +22,7 @@ import uuid
 import math
 import json
 from datetime import datetime, timedelta
+from app.core.paths import DATA_DIR
 
 SEED = 42
 rng = np.random.default_rng(SEED)
@@ -510,6 +511,6 @@ if __name__ == "__main__":
     accounts_df, txns_df = build_dataset()
     summarize(accounts_df, txns_df)
 
-    accounts_df.to_csv("/home/claude/sentinel/data/accounts.csv", index=False)
-    txns_df.to_csv("/home/claude/sentinel/data/transactions.csv", index=False)
+    accounts_df.to_csv(DATA_DIR / "accounts.csv", index=False)
+    txns_df.to_csv(DATA_DIR / "transactions.csv", index=False)
     print("\nSaved to data/accounts.csv and data/transactions.csv")

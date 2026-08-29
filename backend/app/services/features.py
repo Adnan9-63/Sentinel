@@ -18,6 +18,7 @@ Run:
 
 import pandas as pd
 from app.core.feature_state import FeatureState
+from app.core.paths import DATA_DIR
 
 
 def build_features(txns_df: pd.DataFrame, accounts_df: pd.DataFrame) -> pd.DataFrame:
@@ -55,8 +56,8 @@ def build_features(txns_df: pd.DataFrame, accounts_df: pd.DataFrame) -> pd.DataF
 
 
 if __name__ == "__main__":
-    txns = pd.read_csv("/home/claude/sentinel/data/transactions.csv")
-    accounts = pd.read_csv("/home/claude/sentinel/data/accounts.csv")
+    txns = pd.read_csv(DATA_DIR / "transactions.csv")
+    accounts = pd.read_csv(DATA_DIR / "accounts.csv")
 
     feat_df = build_features(txns, accounts)
 
@@ -70,5 +71,5 @@ if __name__ == "__main__":
     ]
     print(feat_df.groupby("label")[numeric_cols].mean().round(2).T)
 
-    feat_df.to_csv("/home/claude/sentinel/data/features.csv", index=False)
+    feat_df.to_csv(DATA_DIR / "features.csv", index=False)
     print("\nSaved to data/features.csv")
