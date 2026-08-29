@@ -12,6 +12,10 @@ dist/
 .env
 .env.local
 
+# Runtime-generated audit ledger -- meant to start fresh each run, not be
+# committed with whatever test data happened to be in it locally
+data/audit_ledger.jsonl
+
 # OS
 .DS_Store
 
