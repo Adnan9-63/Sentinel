@@ -25,6 +25,7 @@ from app.core.triage_gate import triage
 from app.core.grounding_check import check_grounding
 from app.agents.reasoning_agent import build_user_prompt, _new_boundary_tag, parse_and_validate
 from app.schemas.risk_decision import RiskDecision
+from app.api.rate_limit import limiter
 
 
 @pytest.fixture(scope="module")
@@ -44,6 +45,18 @@ def clean_ledger():
     yield
     if os.path.exists(LEDGER_PATH):
         os.remove(LEDGER_PATH)
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """Same reasoning as clean_ledger: the rate limiter's counters are
+    shared across every test using the module-scoped client, so without
+    this, whichever test happens to run first silently eats into the
+    quota of every test that runs after it -- found this exact failure
+    mode when TestRateLimiting's own count came up short because an
+    earlier test in the file had already hit the same endpoint once."""
+    limiter.reset()
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -102,26 +115,69 @@ class TestMalformedInput:
 # feature_state.py. This test is the actual regression guard for that fix.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Rate limiting
+# Added same day as the concurrency test above needed updating for it --
+# a fraud-prevention API with no protection on its own endpoints was a
+# real gap, not a hypothetical one. See app.api.rate_limit for the actual
+# limits and the honest scope note on what this does and doesn't cover.
+# ---------------------------------------------------------------------------
+
+class TestRateLimiting:
+    def test_exceeding_the_limit_returns_429_not_a_crash(self, client):
+        statuses = []
+        for _ in range(25):  # SIMULATE_LIMIT is 20/minute
+            r = client.post("/api/simulate/normal")
+            statuses.append(r.status_code)
+
+        assert 200 in statuses, "nothing succeeded at all -- limit is misconfigured"
+        assert 429 in statuses, "limit was never triggered -- rate limiting isn't actually active"
+        assert all(s in (200, 429) for s in statuses), f"unexpected status codes: {set(statuses)}"
+        # exactly the first 20 succeed, the rest are cleanly rejected
+        assert statuses.count(200) == 20
+
+    def test_burst_endpoint_has_a_tighter_limit(self, client):
+        statuses = []
+        for _ in range(12):  # BURST_LIMIT is 10/minute
+            r = client.post("/api/simulate/card_testing_burst?n=3")
+            statuses.append(r.status_code)
+        assert statuses.count(200) == 10
+        assert statuses.count(429) == 2
+
+
 class TestConcurrency:
     def test_60_concurrent_requests_keep_chain_intact(self, client):
+        """This test's actual purpose is thread-safety: does concurrent
+        access corrupt the audit ledger or FeatureState? It is NOT a test
+        of unlimited throughput -- /simulate/normal is now rate-limited
+        (added the same day this test needed updating for it), so most of
+        these 60 requests are EXPECTED to be cleanly rejected with 429, not
+        succeed. What must never happen: a crash, a 500, or a broken chain.
+        Every successfully-logged entry must still form a valid chain."""
         N = 60
 
         def fire(_):
             r = client.post("/api/simulate/normal")
-            return r.status_code, r.json().get("transaction_id")
+            tx_id = r.json().get("transaction_id") if r.status_code == 200 else None
+            return r.status_code, tx_id
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
             results = list(ex.map(fire, range(N)))
 
         statuses = [r[0] for r in results]
-        tx_ids = [r[1] for r in results]
+        succeeded = [r for r in results if r[0] == 200]
+        tx_ids = [r[1] for r in succeeded]
 
-        assert all(s == 200 for s in statuses), f"not all requests succeeded: {set(statuses)}"
-        assert len(set(tx_ids)) == N, "duplicate transaction IDs under concurrent load"
+        # every response must be a clean 200 or a clean 429 -- never a crash
+        assert all(s in (200, 429) for s in statuses), f"unexpected status codes: {set(statuses)}"
+        assert len(succeeded) > 0, "rate limit configuration is too strict -- nothing succeeded at all"
+        assert len(set(tx_ids)) == len(succeeded), "duplicate transaction IDs among successful requests"
 
         chain = verify_chain()
         assert chain["intact"], f"audit chain broke under concurrent load: {chain}"
-        assert chain["n_entries"] == N
+        assert chain["n_entries"] == len(succeeded), (
+            f"chain has {chain['n_entries']} entries but {len(succeeded)} requests succeeded -- mismatch"
+        )
 
 
 # ---------------------------------------------------------------------------

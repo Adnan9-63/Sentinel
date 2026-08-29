@@ -13,17 +13,27 @@ FeatureState, trained ML models, ring cluster map) and kept in memory --
 this is a hackathon-scale single-process server, not a production
 deployment, and that tradeoff is intentional and documented rather than
 pretending otherwise.
+
+Rate limiting: the /simulate endpoints do real work (feature computation,
+ML inference, LLM calls, ledger writes) and are capped per-client-IP to
+stop naive hammering -- a fraud-prevention API with no protection on its
+own endpoints is a pointed, easy-to-spot irony worth closing, not leaving
+as an oversight. See app.api.rate_limit for the actual limits and the
+honest scope note on what this does and doesn't cover.
 """
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 import pandas as pd
 
 from app.core.feature_state import FeatureState
 from app.services.ml_detection import load_ensemble
 from app.services.ring_detection import build_account_graph, score_clusters
 from app.core.paths import DATA_DIR as _DATA_DIR
+from app.api.rate_limit import limiter
 
 DATA_DIR = str(_DATA_DIR)
 
@@ -87,6 +97,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Sentinel API", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

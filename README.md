@@ -223,3 +223,10 @@ in Vite's bundled esbuild (dev server only, not the production build --
 allows cross-origin requests to the local dev server). Fixing it requires
 a breaking upgrade to Vite 8 that hasn't been tested against this project.
 Not a concern for local development/demo use.
+
+**API rate limiting:** every endpoint that does real work is rate-limited
+per client IP (20/minute on simulate endpoints, 10/minute on the burst
+endpoint, 60/minute on reads) -- see `backend/app/api/rate_limit.py` for
+the exact limits and an explicit note on what this covers (naive
+single-source hammering) and doesn't (it isn't authentication, and isn't
+a substitute for a real gateway in a production deployment).

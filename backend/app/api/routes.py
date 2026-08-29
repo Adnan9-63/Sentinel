@@ -13,7 +13,7 @@ canned/scripted responses.
 import json
 import os
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.ml_detection import ensemble_score, FEATURE_COLS
 from app.core.triage_gate import triage
@@ -21,6 +21,7 @@ from app.services.audit_ledger import log_decision, verify_chain, LEDGER_PATH
 from app.services.live_simulator import (
     simulate_normal_transaction, simulate_ato_transaction, simulate_card_testing_burst,
 )
+from app.api.rate_limit import limiter, READ_LIMIT, SIMULATE_LIMIT, BURST_LIMIT
 
 router = APIRouter()
 
@@ -80,7 +81,8 @@ def health():
 
 
 @router.get("/transactions/recent")
-def recent_transactions(limit: int = Query(50, ge=1, le=500)):
+@limiter.limit(READ_LIMIT)
+def recent_transactions(request: Request, limit: int = Query(50, ge=1, le=500)):
     if not os.path.exists(LEDGER_PATH):
         return {"transactions": []}
     lines = []
@@ -93,7 +95,8 @@ def recent_transactions(limit: int = Query(50, ge=1, le=500)):
 
 
 @router.get("/stats/summary")
-def stats_summary():
+@limiter.limit(READ_LIMIT)
+def stats_summary(request: Request):
     if not os.path.exists(LEDGER_PATH):
         return {"total": 0}
     df = pd.read_json(LEDGER_PATH, lines=True)
@@ -109,7 +112,8 @@ def stats_summary():
 
 
 @router.get("/clusters")
-def clusters():
+@limiter.limit(READ_LIMIT)
+def clusters(request: Request):
     from app.api.main import state
     by_type = {}
     for acc_id, info in state.ring_map.items():
@@ -121,7 +125,8 @@ def clusters():
 
 
 @router.post("/simulate/normal")
-def simulate_normal():
+@limiter.limit(SIMULATE_LIMIT)
+def simulate_normal(request: Request):
     from app.api.main import state
     if len(state.accounts_df) == 0:
         raise HTTPException(500, "no accounts loaded")
@@ -139,7 +144,8 @@ def simulate_normal():
 
 
 @router.post("/simulate/ato")
-def simulate_ato():
+@limiter.limit(SIMULATE_LIMIT)
+def simulate_ato(request: Request):
     from app.api.main import state
     if len(state.accounts_df) == 0:
         raise HTTPException(500, "no accounts loaded")
@@ -149,7 +155,8 @@ def simulate_ato():
 
 
 @router.post("/simulate/card_testing_burst")
-def simulate_burst(n: int = Query(15, ge=3, le=50)):
+@limiter.limit(BURST_LIMIT)
+def simulate_burst(request: Request, n: int = Query(15, ge=3, le=50)):
     from app.api.main import state
     from app.services.ring_detection import build_account_graph, score_clusters
 

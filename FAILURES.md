@@ -612,3 +612,52 @@ served the interactive docs. This is stronger evidence than any amount of
 sandbox-only testing: the two most severe bugs found this week (the
 hardcoded paths, the Windows dependency failure) are now verified fixed
 on the actual machine this needs to work on for the demo.
+
+---
+
+## [Aug 29] Closing another strict-judge critique: the API had no rate limiting
+
+Self-review flagged this directly: a fraud-prevention system whose own
+API has zero protection against being hammered is a pointed, easy-to-spot
+irony. Added per-client-IP rate limiting (slowapi) on every endpoint that
+does real work -- 20/minute on /simulate/normal and /simulate/ato,
+10/minute on the burst endpoint (each burst call already generates up to
+50 transactions internally), 60/minute on reads.
+
+Verified directly, not assumed: fired 25 rapid requests at
+/simulate/normal and confirmed exactly 20 succeeded before a clean 429
+with a clear message, not a crash or a hang.
+
+**That fix broke an existing test, caught immediately by actually running
+the suite instead of assuming the new feature was additive:** Day 5's
+concurrency test fires 60 simultaneous requests at /simulate/normal and
+asserted all 60 return 200 -- an assumption the new rate limit correctly
+invalidates. Rewrote the test to check what it was always actually meant
+to check: does concurrent access corrupt the ledger or FeatureState, not
+does the API have unlimited throughput. Now asserts every response is a
+clean 200 or 429 (never a crash), and that the audit chain stays valid
+for exactly however many requests DID succeed.
+
+**A second bug surfaced immediately after, in the new tests themselves:**
+a fresh rate-limiting test expecting exactly 20 successes came up short,
+because the rate limiter's counters are shared across every test using
+the same module-scoped test client -- an earlier, unrelated test that
+also happened to hit /simulate/normal once had already eaten into this
+test's quota before it started. Fixed with an autouse fixture
+(`reset_rate_limits`) that clears the limiter's state before every test,
+the same pattern already used for the audit ledger's `clean_ledger`
+fixture.
+
+**Honest scope note, written directly into the rate-limit module, not
+just in this file:** this is IP-based limiting on a single-process
+hackathon deployment. It stops naive scripted hammering from one source.
+It is not authentication, does not stop a distributed attack, and is not
+a substitute for a real API gateway in front of a production deployment.
+Deliberately did not add full auth here -- it would add real friction to
+the live demo (the dashboard hitting these endpoints unauthenticated from
+a browser) for a security property that matters far more in an
+internet-facing deployment than a local demo.
+
+Final count: 21 tests in the adversarial suite (19 + 2 new), all passing.
+Full pipeline re-verified unaffected (it calls the triage/ledger logic
+directly, not through the rate-limited HTTP layer).
