@@ -572,3 +572,32 @@ This is very likely the single most important bug found in this entire
 build. A submission that fails at git clone + follow the README is a
 submission a judge can't evaluate at all, regardless of how good
 everything else is.
+
+---
+
+## [Aug 29] Windows install broke on pandas trying to compile from source
+
+Adnan hit this immediately trying to verify yesterday's path fix: `pip
+install -r requirements.txt` failed on pandas==2.2.2 with a Meson/C++
+build error, missing Visual Studio build tools.
+
+Root cause, not guessed: pandas 2.2.2 predates Python 3.13 (Adnan's
+installed version) and has no prebuilt Windows wheel for it, so pip fell
+back to compiling from source -- which needs a C++ toolchain nobody
+should need to install mid-deadline just to run a fraud-detection demo.
+
+Fix: loosened the exact pins on the four packages most likely to need
+compiled wheels (pandas, numpy, scikit-learn, scipy) to minimum-version
+ranges capped below their next major release, instead of exact pins.
+Verified the resolved versions (pandas 2.3.3, numpy 2.5.2, scikit-learn
+1.9.0, scipy 1.18.1) install cleanly from prebuilt wheels with zero
+compilation. Given the size of that jump (numpy 1.26->2.5 especially),
+didn't just trust it -- reran the entire pipeline (data generation,
+features, ring detection, ML training, base-rate analysis, full pipeline,
+and the 19-test adversarial suite) from an isolated copy under the new
+versions. Every single number matched the old versions exactly.
+
+One harmless side effect surfaced by the newer numpy: a deprecation
+warning from inside joblib's own internals (not our code), firing 1210
+times across the test run. Not a bug, just noise -- suppressed via
+pytest.ini rather than left cluttering otherwise-clean test output.
