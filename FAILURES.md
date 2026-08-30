@@ -661,3 +661,57 @@ internet-facing deployment than a local demo.
 Final count: 21 tests in the adversarial suite (19 + 2 new), all passing.
 Full pipeline re-verified unaffected (it calls the triage/ledger logic
 directly, not through the rate-limited HTTP layer).
+
+---
+
+## [Aug 30] Real MCP integration — a genuine version-conflict cascade found and resolved
+
+Deferred earlier (Aug 29) as "later," now built: Sentinel's API is exposed
+as real MCP (Model Context Protocol) tools, using `fastapi-mcp`. This is
+not a design metaphor -- Razorpay's own Agent Studio (launched March
+2026) is built on Anthropic's Claude Agent SDK + MCP, so this is a real,
+working protocol connection to the same standard, not just a written
+claim of alignment.
+
+**First real bug:** server crashed on startup --
+`TypeError: Server.__init__() takes 2 positional arguments but 3 were
+given`. Root cause: `fastapi-mcp==0.4.0` was built against the MCP SDK's
+1.x line; the newly-released `mcp==2.1.1` changed the `Server` class's
+constructor signature. Fixed by pinning `mcp==1.29.1`, the newest 1.x
+release, compatible with what `fastapi-mcp` actually expects.
+
+**Verified as a REAL protocol connection, not just "it imports":**
+performed the actual MCP handshake (`initialize`), listed tools
+(`tools/list` correctly returned all 7 API endpoints with full schemas),
+and called one for real (`tools/call` on the normal-transaction simulator
+returned a genuine, correctly-computed risk decision that went through
+the entire real pipeline). Then repeated the same test calling
+`simulate_ato` instead, confirming it wasn't a one-endpoint fluke.
+
+**A version-conflict cascade, found and fixed properly, not by trial and
+error alone:** adding `mcp==1.29.1` immediately broke a clean install --
+its own dependencies required `httpx>=0.27.1` (we had exactly `0.27.0`
+pinned), then `pydantic>=2.11.0` (we had exactly `2.9.2`), then
+`uvicorn>=0.31.1` (we had exactly `0.30.6`). Rather than keep discovering
+these one at a time by trial and error, pulled `mcp` and `fastapi-mcp`'s
+complete declared dependency lists directly from their package metadata
+to see the full picture at once, then fixed all three pins together.
+
+**Given how large some of these jumps were (pydantic 2.9->2.13, uvicorn
+0.30->0.52), didn't assume compatibility -- proved it:** reran the entire
+pipeline, the full 21-test adversarial suite, AND the live MCP protocol
+test end to end, in a completely isolated copy, using only the new pinned
+versions. Every number matched exactly; all 21 tests passed.
+
+**Minor, cosmetic issue found and disclosed rather than hidden:**
+`fastapi-mcp`'s internal call to `Server(name, description)` lands the
+description text in the MCP server's `version` field due to an argument-
+order mismatch between the two libraries. Purely cosmetic (visible only
+in the raw protocol handshake, doesn't affect tool listing or calling) --
+a bug in the third-party library's own code, not something worth patching
+this close to the deadline, but worth stating honestly rather than
+pretending the integration is flawless.
+
+One more third-party deprecation warning suppressed in pytest.ini
+(starlette's import style), following the same standard set on Day 7 and
+Day 9 -- clean test output, not accumulated noise.

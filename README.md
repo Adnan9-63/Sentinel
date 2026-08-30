@@ -104,6 +104,19 @@ sentinel/
 
 Grounded in Razorpay's own public engineering output, not guesswork.
 
+### A real protocol connection, not just an architectural claim
+
+Razorpay's Agent Studio (launched March 2026) is built on Anthropic's
+Claude Agent SDK + MCP (Model Context Protocol). Sentinel's own API is
+mounted as real MCP tools (`backend/app/api/main.py`, via
+`fastapi-mcp`) -- every risk-scoring and simulation endpoint is callable
+directly by Claude or any MCP-compatible orchestrator today, the same way
+an Agent Studio agent would call a tool. This was verified end-to-end,
+not just wired up: the actual MCP handshake, tool listing, and a real
+tool call (returning a genuine risk decision computed through the full
+pipeline) all confirmed working -- see FAILURES.md for the version
+conflicts found and fixed along the way.
+
 ### Sentinel already matches Razorpay's own stated Agent Studio principles
 
 Razorpay launched Agent Studio in March 2026, built on Anthropic's Claude

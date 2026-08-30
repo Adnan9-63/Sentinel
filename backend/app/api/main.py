@@ -110,3 +110,25 @@ app.add_middleware(
 
 from app.api.routes import router  # noqa: E402  (import after `app` exists, routes use `state`)
 app.include_router(router, prefix="/api")
+
+# Expose Sentinel's own API as real MCP tools -- not a design metaphor,
+# an actual protocol connection. Razorpay's own Agent Studio (launched
+# March 2026) is built on Anthropic's Claude Agent SDK + MCP; this means
+# Sentinel's risk-reasoning endpoints can be called directly by Claude or
+# any MCP-compatible orchestrator today, the same way an Agent Studio
+# agent would call a tool. Mounted AFTER the routes are registered so it
+# can discover them from the app's own OpenAPI schema.
+from fastapi_mcp import FastApiMCP  # noqa: E402
+
+mcp = FastApiMCP(
+    app,
+    name="Sentinel Risk Console",
+    description=(
+        "Coordinated abuse-ring and fraud-spike risk tools: score a "
+        "transaction, run live scenarios, and read the tamper-evident "
+        "audit trail. Every scoring action is defense-only -- these "
+        "tools can flag a transaction for human review, never freeze an "
+        "account automatically."
+    ),
+)
+mcp.mount_http()
