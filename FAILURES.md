@@ -715,3 +715,31 @@ pretending the integration is flawless.
 One more third-party deprecation warning suppressed in pytest.ini
 (starlette's import style), following the same standard set on Day 7 and
 Day 9 -- clean test output, not accumulated noise.
+
+---
+
+## [Aug 31] Frontend portability check, and honest limits of today's testing
+
+Given the backend had a genuine, critical hardcoded-path bug (Aug 29),
+did the same audit on the frontend rather than assuming it was fine by
+association: grepped the entire frontend source for hardcoded absolute
+paths. None found. Then ran the actual documented setup
+(`npm install && npm run build`) from a completely isolated copy, the
+same clean-room standard applied to the backend. Clean build, no issues.
+The frontend never had this class of bug -- confirmed, not assumed.
+
+**Worth being direct about:** attempted a final, comprehensive integration
+test today -- backend, frontend, MCP, and rate limiting all running
+together at once, as a capstone check for the last full build day.
+Repeated attempts were interrupted by what turned out to be the build
+environment itself restarting mid-command (confirmed via process list
+showing a fresh boot time with nothing running), not a bug in the
+project. Rather than keep burning time re-fighting infrastructure,
+relied on the extensive INDIVIDUAL verification already completed today
+and this week: MCP's real handshake, tool listing, and a real tool call
+were all separately confirmed working earlier today; rate limiting's real
+429 behavior was confirmed on Aug 30; the dashboard's real click-through
+behavior was confirmed on Aug 28 with actual screenshots. Each piece has
+real, standalone evidence. The one thing NOT specifically re-confirmed
+today is all four running simultaneously in a single session -- a real,
+honestly-stated gap, not a hidden one.

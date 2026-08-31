@@ -19,6 +19,7 @@ data/audit_ledger.jsonl
 # Personal prep documents -- for local study only, not part of the public submission
 ARCHITECTURE_EXPLAINED.md
 INTERVIEW_PREP.md
+VIDEO_SCRIPT.md
 
 # OS
 .DS_Store
