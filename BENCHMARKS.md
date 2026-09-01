@@ -139,19 +139,20 @@ Audit chain: **281/281 entries verified intact.**
 
 ## Adversarial test suite
 
-19 tests, `backend/tests/test_adversarial.py`, all passing on this run:
+21 tests, `backend/tests/test_adversarial.py`, all passing on this run:
 
 | Category | Tests | Result |
 |---|---|---|
 | Malformed/boundary API input | 9 | 9/9 passed |
+| Rate limiting (added Aug 29) | 2 | 2/2 passed |
 | Concurrency (60 simultaneous requests) | 1 | passed -- chain stayed intact |
 | Prompt-injection delimiter defense | 3 | 3/3 passed |
 | Grounding check (fabricated evidence detection) | 4 | 4/4 passed |
 | Audit ledger tamper detection | 2 | 2/2 passed |
 
-Two of these tests exist specifically because they FAILED the first time
-they were run for real, not because they were designed to pass from the
-start:
+Three of these tests exist specifically because they FAILED the first
+time they were run for real, not because they were designed to pass from
+the start:
 
 - **Concurrency test**: 60 simultaneous requests originally broke the
   audit chain via a race condition (multiple requests reading the same
@@ -159,8 +160,16 @@ start:
 - **Prompt-injection test**: a fixed delimiter tag name could be spoofed
   by an attacker typing the literal closing tag into any field reaching
   the prompt. Fixed with a random per-request boundary token.
+- **Rate-limiting test**: adding rate limiting (Aug 29) broke the
+  existing concurrency test's assumption that unlimited requests always
+  succeed -- correctly, since that's exactly what rate limiting is
+  supposed to stop. Rewrote the concurrency test to check what it always
+  should have (no corruption under load, not unlimited throughput). The
+  new rate-limit test itself then failed once too, from shared counters
+  leaking between tests -- fixed with the same reset-before-each-test
+  pattern already used for the audit ledger.
 
-Full before/after numbers for both are in `FAILURES.md`.
+Full before/after numbers for all three are in `FAILURES.md`.
 
 ## What isn't benchmarked yet, stated directly
 

@@ -194,7 +194,7 @@ for Aug 31 instead of Sep 3, giving more buffer before the Sep 5 deadline.)
 
 Every real, measured number from this project -- ML precision/recall,
 false-positive cost analysis, ring detection accuracy, and the full
-19-test adversarial suite -- is consolidated in **[BENCHMARKS.md](BENCHMARKS.md)**.
+21-test adversarial suite -- is consolidated in **[BENCHMARKS.md](BENCHMARKS.md)**.
 
 To test the reasoning layer against the real Anthropic API (this build
 environment has none, disclosed throughout `FAILURES.md`), run
