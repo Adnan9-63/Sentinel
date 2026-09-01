@@ -15,6 +15,11 @@
   <text x="450" y="123" text-anchor="middle" font-size="13.5" fill="#FFFFFF" font-weight="500">Transaction Stream</text>
   <line x1="450" y1="141" x2="450" y2="166" stroke="#2A3448" stroke-width="2" marker-end="url(#arrow)"/>
 
+  <!-- API access annotation -->
+  <rect x="650" y="97" width="200" height="42" rx="6" fill="#F4F6FA" stroke="#4FD1C5" stroke-width="1"/>
+  <text x="750" y="114" text-anchor="middle" font-size="10" font-weight="600" fill="#0E1420">REST API + real MCP tools</text>
+  <text x="750" y="128" text-anchor="middle" font-size="9" fill="#6B7385">Callable by Claude directly · rate-limited</text>
+
   <!-- Feature engineering -->
   <rect x="250" y="168" width="400" height="58" rx="8" fill="#F4F6FA" stroke="#2A3448" stroke-width="1.5"/>
   <text x="450" y="192" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0E1420">Causal Feature Engineering</text>

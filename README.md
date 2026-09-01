@@ -78,9 +78,17 @@ Audit Ledger (append-only)
     validation result -> final status -> human override (if any)
         |
 Dashboard (React)
-  - live feed, ring visualizations, confusion matrix, false-positive
-    cost tradeoff slider
+  - live decision feed with the audit chain visually linked entry-to-entry
+  - control panel to trigger real scenarios (normal / takeover / burst)
+  - session stats: path breakdown, accounts in flagged clusters
+  - grounding-check warnings surfaced inline when the AI's own evidence
+    doesn't match the real input data
 ```
+
+API access: REST endpoints, and Sentinel's own API mounted as real MCP
+tools (callable directly by Claude or any MCP-compatible orchestrator,
+verified end-to-end -- see FAILURES.md). Every endpoint doing real work
+is rate-limited per client IP (see `backend/app/api/rate_limit.py`).
 
 ## Repo layout
 
