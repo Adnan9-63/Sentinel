@@ -743,3 +743,28 @@ behavior was confirmed on Aug 28 with actual screenshots. Each piece has
 real, standalone evidence. The one thing NOT specifically re-confirmed
 today is all four running simultaneously in a single session -- a real,
 honestly-stated gap, not a hidden one.
+
+---
+
+## [Sep 4] Final polish: Ghost Service Workers and SDK Dependency Hell
+
+Ran a final end-to-end presentation dry run and hit two critical, silent failures that would have completely derailed a live demo.
+
+**Bug 1: The "Ghost Service Worker" White Screen**
+The React dashboard (`localhost:5173`) was completely blank on a normal refresh. A hard refresh (`Ctrl+Shift+R`) temporarily fixed it, but the blank screen returned on the next normal load. 
+*Root Cause:* An old, unrelated Service Worker from a previous local project was still active and registered to `localhost:5173`. It was intercepting all network requests *before* they reached the Vite dev server, serving a broken, cached HTML payload. Adding `Cache-Control: no-store` to Vite didn't work because the request never reached Vite.
+*Fix:* Injected an aggressive unregistration script directly into `frontend/index.html`'s `<head>`. On the next hard refresh, the script ran client-side, nuked all lingering `navigator.serviceWorker` registrations, and permanently restored Vite's normal HMR behavior.
+
+**Bug 2: Google Generative AI SDK compilation failure**
+To prove the architecture is vendor-agnostic and immune to lock-in (and to work around an inaccessible Anthropic API key), we swapped the LLM reasoning layer to Google Gemini 1.5 Flash.
+Attempting to `pip install google-generativeai` failed completely. 
+*Root Cause:* The user environment is running Python 3.13 on Windows. The Google SDK depends on `grpcio`, which attempts to compile C++ wheels from source and fails without Visual Studio build tools.
+*Fix:* Completely stripped out the bulky Google SDK. Rewrote `call_llm_gemini()` to use standard `requests.post()` against the Gemini REST API directly. This completely bypassed dependency hell, making the backend infinitely more portable and resilient.
+
+**Bug 3: Deprecated LLM endpoint 404**
+After the REST rewrite, the API returned a 404 Not Found. 
+*Root Cause:* The hardcoded string `gemini-1.5-flash` had been deprecated by Google in favor of `gemini-flash-latest` on the `v1beta` endpoint.
+*Fix:* Updated the model string.
+
+**The "Fail-Safe" Validation:**
+During the Gemini testing, we hit the free-tier rate limit, triggering a `503 Service Unavailable`. Instead of the backend crashing or the UI freezing, the Triage Gate caught the `HTTPError`, correctly routed the transaction to "human review", and logged `"automated reasoning layer failed: API call failed"` as the evidence. This perfectly validated the fail-safe architecture designed on Day 1 — a real API outage was handled securely and deterministically.

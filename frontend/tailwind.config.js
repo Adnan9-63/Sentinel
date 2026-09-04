@@ -4,21 +4,32 @@ export default {
   theme: {
     extend: {
       colors: {
-        base: '#0E1420',
-        surface: '#161D2C',
-        surface2: '#1D2740',
-        hairline: '#2A3448',
-        ink: '#E8ECF4',
-        muted: '#8891A6',
-        teal: '#4FD1C5',
-        allow: '#6FCF97',
-        review: '#F2B84B',
-        flagged: '#E8637A',
+        base:     '#f4f5f7',   // Light mode base background
+        surface:  '#ffffff',   // Cards
+        surface2: '#f8f9fa',   // Card hover / secondary surface
+        hairline: '#ebecf0',   // Crisp borders
+        ink:      '#172b4d',   // Primary text
+        muted:    '#5e6c84',   // Secondary text
+        brand:    '#0D94FB',   // Dodger Blue - primary action
+        deep:     '#012652',   // Prussian Blue - headers
+        allow:    '#04db7c',   // Success green
+        review:   '#ff991f',   // Warning amber
+        flagged:  '#de350b',   // Danger red
+        dim:      '#091e420a', // Subtle shadow/dim
       },
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        mono: ['"Fira Code"', 'monospace'],
       },
+      borderRadius: {
+        sm: '4px',
+        md: '6px',
+        lg: '12px',
+      },
+      boxShadow: {
+        'card': '0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31)',
+        'float': '0 4px 8px -2px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31)',
+      }
     },
   },
   plugins: [],

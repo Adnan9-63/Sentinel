@@ -27,6 +27,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import pandas as pd
 
 from app.core.feature_state import FeatureState

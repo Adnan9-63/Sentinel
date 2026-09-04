@@ -32,6 +32,12 @@ limiter = Limiter(key_func=get_remote_address)
 # work (ML inference, an LLM call attempt, a ledger write) and are capped
 # tighter. The burst endpoint is capped tightest since a single call
 # already generates up to 50 transactions internally.
-READ_LIMIT = "60/minute"
-SIMULATE_LIMIT = "20/minute"
-BURST_LIMIT = "10/minute"
+#
+# Limits are set generously for demo/local use -- the point is to stop
+# naive scripted hammering (a for-loop with no sleep), not to throttle
+# a human clicking through scenarios on a dashboard. In a real
+# internet-facing deployment these would be tighter and backed by Redis
+# rather than in-memory state.
+READ_LIMIT = "200/minute"
+SIMULATE_LIMIT = "120/minute"
+BURST_LIMIT = "60/minute"

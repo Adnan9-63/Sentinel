@@ -28,7 +28,7 @@ account is never frozen by this system without a human confirming it.
 
 from dataclasses import dataclass, field
 
-from app.agents.reasoning_agent import get_risk_decision, call_llm_live
+from app.agents.reasoning_agent import get_risk_decision
 from app.schemas.risk_decision import RiskDecision
 from app.core.grounding_check import check_grounding
 
@@ -82,7 +82,6 @@ def triage(
     risk_score: float,
     feature_context: dict,
     ring_context: dict | None = None,
-    llm_caller=call_llm_live,
 ) -> TriageResult:
     if risk_score < LOW_THRESHOLD:
         return TriageResult(
@@ -93,7 +92,7 @@ def triage(
         )
 
     if risk_score < HIGH_THRESHOLD:
-        decision = get_risk_decision(feature_context, ring_context, llm_caller=llm_caller)
+        decision = get_risk_decision(feature_context, ring_context)
         final_status = "allowed" if decision.action == "allow" else "flagged_for_review"
 
         # Grounding check: does the model's own evidence actually correspond

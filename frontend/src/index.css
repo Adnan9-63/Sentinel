@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 body {
-  font-family: 'IBM Plex Sans', sans-serif;
-  background: #0E1420;
-  color: #E8ECF4;
+  font-family: 'Inter', sans-serif;
+  background-color: #f4f5f7;
+  color: #172b4d;
   -webkit-font-smoothing: antialiased;
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'Fira Code', monospace;
 }
 
-/* visible keyboard focus, not suppressed */
+/* visible keyboard focus */
 :focus-visible {
-  outline: 2px solid #4FD1C5;
+  outline: 2px solid #0D94FB;
   outline-offset: 2px;
 }
 
@@ -32,4 +32,23 @@ body {
 }
 .live-dot {
   animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* risk score inline bar */
+.risk-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #ebecf0;
+  overflow: hidden;
+}
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* header gradient accent line - razorpay blue/green */
+.header-accent {
+  height: 2px;
+  background: linear-gradient(90deg, #012652 0%, #0D94FB 50%, #04db7c 100%);
 }

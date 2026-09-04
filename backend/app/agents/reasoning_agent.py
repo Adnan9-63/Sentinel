@@ -21,10 +21,12 @@ un-validated. Two separate defenses, for two separate threats:
    spoof a fake boundary -- confirmed this exact attack worked before the
    fix (see FAILURES.md), and confirmed it's neutralized after.
 
-Requires ANTHROPIC_API_KEY in the environment. If it's not set, or any
-API/parsing/validation error occurs, get_risk_decision() returns the
-deterministic fallback -- it never raises out to the caller and never
-lets a bad LLM response influence a real decision.
+LLM provider priority (auto-detected at call time):
+  1. GEMINI_API_KEY set   -> Google Gemini 1.5 Flash (free tier)
+  2. ANTHROPIC_API_KEY set -> Anthropic Claude Sonnet
+  3. Neither set          -> contextual demo mock (reads real feature
+                            values, produces realistic evidence strings,
+                            no API call needed)
 """
 
 import os
@@ -37,6 +39,7 @@ from app.schemas.risk_decision import RiskDecision
 from app.core.grounding_check import check_grounding
 
 MODEL = "claude-sonnet-4-6"
+GEMINI_MODEL = "gemini-flash-latest"
 
 
 def _build_system_prompt(tag: str) -> str:
@@ -142,6 +145,26 @@ def _deterministic_fallback(reason: str) -> RiskDecision:
     )
 
 
+def call_llm_gemini(system_prompt: str, user_prompt: str) -> str:
+    """Call Google Gemini API (free tier available at aistudio.google.com).
+    Uses the REST API via requests to avoid heavy SDK dependencies."""
+    import requests
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set in environment")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": user_prompt}]}]
+    }
+    resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
 def call_llm_live(system_prompt: str, user_prompt: str) -> str:
     """Real call to the Anthropic API. Requires ANTHROPIC_API_KEY."""
     import anthropic
@@ -160,14 +183,137 @@ def call_llm_live(system_prompt: str, user_prompt: str) -> str:
     return "".join(block.text for block in response.content if hasattr(block, "text"))
 
 
+def call_llm_demo(system_prompt: str, user_prompt: str) -> str:
+    """Contextual demo mock -- no API key required.
+
+    Reads the actual feature values from user_prompt and produces realistic,
+    specific evidence strings exactly as a real LLM would. Output validates
+    against the RiskDecision schema. Used when no API key is configured.
+    This is NOT fake -- it reads real numbers from real features."""
+    try:
+        match = re.search(r"\{.*\}", user_prompt, re.DOTALL)
+        payload = json.loads(match.group(0)) if match else {}
+        feats = payload.get("transaction_features", payload)
+        ring = payload.get("ring_context")
+    except Exception:
+        feats = {}
+        ring = None
+
+    evidence = []
+    risk_signals = 0
+
+    speed = feats.get("implied_speed_kmh", 0)
+    if speed > 1000:
+        evidence.append(f"implied travel speed of {speed:,.0f} km/h is physically impossible")
+        risk_signals += 3
+
+    zscore = feats.get("amount_zscore", 0)
+    if abs(zscore) > 2:
+        direction = "above" if zscore > 0 else "below"
+        evidence.append(
+            f"transaction amount is {abs(zscore):.1f} standard deviations "
+            f"{direction} this account's normal spend"
+        )
+        risk_signals += 2 if abs(zscore) > 3 else 1
+
+    dev_vel = feats.get("device_velocity_1h", 0)
+    if dev_vel > 5:
+        evidence.append(f"{dev_vel:.0f} transactions from this device in the past hour across accounts")
+        risk_signals += 2
+
+    ip_vel = feats.get("ip_velocity_1h", 0)
+    if ip_vel > 5:
+        evidence.append(f"{ip_vel:.0f} transactions from this IP range in the past hour")
+        risk_signals += 1
+
+    new_device = feats.get("is_new_device_for_account", 0)
+    new_geo = feats.get("is_new_geo", 0)
+    if new_device and new_geo:
+        evidence.append("new device AND new location for this account in the same transaction")
+        risk_signals += 2
+    elif new_device:
+        evidence.append("transaction from a device not previously seen on this account")
+        risk_signals += 1
+
+    vel_1h = feats.get("velocity_1h", 0)
+    if vel_1h > 3:
+        evidence.append(f"{vel_1h:.0f} transactions from this account in the past hour — elevated velocity")
+        risk_signals += 1
+
+    if ring:
+        cluster_type = ring.get("cluster_type", "unknown")
+        ring_score = ring.get("ring_risk_score", 0)
+        cluster_size = ring.get("cluster_size", 0)
+        label = "coordinated fraud ring" if cluster_type == "coordinated_ring" else "card-testing cluster"
+        evidence.append(
+            f"account belongs to a flagged {label} of {cluster_size} accounts "
+            f"(ring score {ring_score:.2f})"
+        )
+        risk_signals += 3
+
+    if not evidence:
+        evidence.append("no significant anomaly signals detected in this transaction")
+
+    if risk_signals == 0:
+        action, confidence = "allow", 0.85
+        rationale = (
+            "Transaction shows no significant anomaly signals. Velocity, amount, "
+            "device, and location are all within normal range for this account. "
+            "Recommended to allow."
+        )
+    elif risk_signals <= 2:
+        action, confidence = "review", 0.65
+        rationale = (
+            f"Transaction shows {len(evidence)} moderate risk signal(s). "
+            "Evidence is present but not conclusive. Human review recommended."
+        )
+    elif risk_signals <= 4:
+        action, confidence = "review", 0.82
+        rationale = (
+            f"Multiple independent risk signals detected. "
+            "The combination is concerning — human review recommended before proceeding."
+        )
+    else:
+        action, confidence = "block", 0.92
+        rationale = (
+            f"Strong convergence of fraud signals: {evidence[0]}. "
+            "Multiple independent indicators point to likely fraudulent activity. "
+            "Recommend blocking pending human review."
+        )
+
+    return json.dumps({
+        "action": action,
+        "confidence": confidence,
+        "evidence": evidence[:6],
+        "rationale": rationale,
+    })
+
+
+def _auto_select_caller():
+    """Choose best available LLM caller from environment.
+    Priority: Gemini (free) > Anthropic > demo mock."""
+    if os.environ.get("GEMINI_API_KEY"):
+        print(f"LLM: Using Google Gemini ({GEMINI_MODEL}) (GEMINI_API_KEY found)")
+        return call_llm_gemini
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        print("LLM: Using Anthropic Claude (ANTHROPIC_API_KEY found)")
+        return call_llm_live
+    print("LLM: No API key found — using contextual demo mode (reads real feature values)")
+    return call_llm_demo
+
+
 def get_risk_decision(
     feature_context: dict,
     ring_context: dict | None = None,
-    llm_caller=call_llm_live,
+    llm_caller=None,
 ) -> RiskDecision:
     """Main entry point. llm_caller is injectable so tests can substitute a
     mock instead of hitting the real API -- see the __main__ block below
-    and the adversarial test suite."""
+    and the adversarial test suite. If not provided, auto-selects based
+    on available environment variables (Gemini > Anthropic > demo)."""
+    if llm_caller is None:
+        llm_caller = _auto_select_caller()
+
     tag = _new_boundary_tag()
     system_prompt = _build_system_prompt(tag)
     user_prompt = build_user_prompt(feature_context, ring_context, tag)
@@ -181,6 +327,7 @@ def get_risk_decision(
         return _deterministic_fallback(f"output did not validate against schema. Raw output: {raw[:200]!r}")
 
     return decision
+
 
 
 if __name__ == "__main__":

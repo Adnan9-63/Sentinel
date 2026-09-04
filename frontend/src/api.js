@@ -2,6 +2,7 @@ const BASE = 'http://localhost:8000/api'
 
 async function req(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, opts)
+  if (res.status === 429) throw new Error('RATE_LIMITED')
   if (!res.ok) throw new Error(`${path} -> ${res.status}`)
   return res.json()
 }

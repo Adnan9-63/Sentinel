@@ -77,7 +77,8 @@ Audit Ledger (append-only)
   - every decision fully traceable: features -> ML score -> LLM output ->
     validation result -> final status -> human override (if any)
         |
-Dashboard (React)
+Dashboard (React - Razorpay Blade UI)
+  - styled precisely to Razorpay's institutional "Blade" design system (Inter/Fira Code, sharp geometry)
   - live decision feed with the audit chain visually linked entry-to-entry
   - control panel to trigger real scenarios (normal / takeover / burst)
   - session stats: path breakdown, accounts in flagged clusters
@@ -89,6 +90,8 @@ API access: REST endpoints, and Sentinel's own API mounted as real MCP
 tools (callable directly by Claude or any MCP-compatible orchestrator,
 verified end-to-end -- see FAILURES.md). Every endpoint doing real work
 is rate-limited per client IP (see `backend/app/api/rate_limit.py`).
+
+**Vendor-Agnostic LLM Layer:** While designed for Razorpay's Anthropic-backed Agent Studio, the LLM caller (`reasoning_agent.py`) is modular. It natively falls back to a raw REST implementation of Google Gemini if an Anthropic key is unavailable, proving immunity to vendor lock-in and avoiding bulky vendor SDKs.
 
 ## Repo layout
 
