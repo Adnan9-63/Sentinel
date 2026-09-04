@@ -195,11 +195,10 @@ rewriting history:
 - Aug 26: Razorpay-specific research pass, positioning against Agent
   Studio/Bumblebee/Vulcan, scope-check addition on the LLM reasoning layer
 - Aug 27-31: remaining polish, expanded adversarial coverage, write-up
-- Sep 1-4: demo video, final README pass
+- Sep 1-4: demo video,fixed ui design, final README pass etcc...
 - Sep 5: submit
 
-(Timeline compressed and reprioritized on Aug 26 -- full build now targeted
-for Aug 31 instead of Sep 3, giving more buffer before the Sep 5 deadline.)
+
 
 ## Results at a glance
 
